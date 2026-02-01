@@ -5,6 +5,9 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ReleaseList } from '@/components/releases/release-list';
 import { listReleases } from '@/lib/actions/releases';
 
+// Force dynamic rendering to avoid static generation during build
+export const dynamic = 'force-dynamic';
+
 export default async function ReleasesPage() {
   const releases = await listReleases();
 

@@ -5,6 +5,9 @@ import { CustomerCard } from '@/components/customers/customer-card';
 import { listClusters } from '@/lib/actions/clusters';
 import { listCustomers } from '@/lib/actions/customers';
 
+// Force dynamic rendering to avoid static generation during build
+export const dynamic = 'force-dynamic';
+
 export default async function CustomersPage() {
   const [customers, clusters] = await Promise.all([
     listCustomers(),

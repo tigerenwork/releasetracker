@@ -141,17 +141,6 @@ sudo docker compose up -d
    ```
    Save this token securely.
 
-6. (Optional) Run migrations:
-   ```bash
-   # Set environment variables temporarily
-   export DB_TYPE=turso
-   export TURSO_URL=libsql://your-database-url
-   export TURSO_TOKEN=your-token
-   
-   # Push schema to Turso
-   npx drizzle-kit push
-   ```
-
 ### Step 2: Deploy to Vercel
 
 1. **Connect Repository**:
@@ -173,9 +162,15 @@ sudo docker compose up -d
    | `TURSO_URL` | Your Turso database URL |
    | `TURSO_TOKEN` | Your Turso auth token |
 
+   > **Note**: The build process will automatically run database migrations using the `prebuild` script. Make sure the environment variables are set before the first build.
+
 4. **Deploy**:
    - Click "Deploy"
    - Vercel will build and deploy automatically
+   - The build process will:
+     1. Run `prebuild` script to create database tables
+     2. Build the Next.js application
+     3. Deploy to Vercel's edge network
 
 ### Updating on Vercel
 
@@ -244,6 +239,12 @@ sudo docker compose up -d
 ```
 
 ### Vercel Issues
+
+**Issue**: Build fails with "no such table" error  
+**Solution**: This happens when the database tables don't exist during build. The `prebuild` script should create them automatically. If it fails:
+   - Ensure `TURSO_URL` and `TURSO_TOKEN` are set in Vercel Environment Variables
+   - Check that the Turso database exists and is accessible
+   - Try running `npx drizzle-kit push` locally with the same credentials to verify
 
 **Issue**: Build fails with database errors  
 **Solution**: Ensure environment variables are set in Vercel dashboard (not just in `.env.local`)

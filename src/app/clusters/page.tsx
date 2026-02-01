@@ -4,6 +4,9 @@ import { Button } from '@/components/ui/button';
 import { ClusterCard } from '@/components/clusters/cluster-card';
 import { listClusters } from '@/lib/actions/clusters';
 
+// Force dynamic rendering to avoid static generation during build
+export const dynamic = 'force-dynamic';
+
 export default async function ClustersPage() {
   const clusters = await listClusters();
   
