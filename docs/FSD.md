@@ -212,11 +212,21 @@ Customer-specific step instance (actual execution unit).
 | ID | Feature | Description |
 |----|---------|-------------|
 | FCS-001 | View Inherited Steps | See template steps applied to customer |
-| FCS-002 | Override Step Content | Modify step content for specific customer |
-| FCS-003 | Add Custom Step | Add step only for specific customer |
+| FCS-002 | Override Step Content | Modify step content for specific customer (even after release activation) |
+| FCS-003 | Add Custom Step | Add step only for specific customer; option to "Add to template" (applies to all customers) |
 | FCS-004 | Skip Step | Mark step as skipped with mandatory reason |
 | FCS-005 | Revert Override | Reset to template content |
-| FCS-006 | Remove Custom Step | Delete customer-specific step |
+| FCS-006 | Remove Custom Step | Delete customer-specific step (not from template) |
+| FCS-007 | Edit Template Steps | Edit template steps after activation (affects all customers with pending status) |
+| FCS-008 | Mixed Step Ordering | Custom steps can be inserted between template steps; use decimal ordering |
+
+**Add Custom Step Flow:**
+1. User clicks "Add Custom Step" for a customer
+2. Fill in step details (name, type, content, category)
+3. Checkbox "Add to template" (unchecked by default):
+   - **Unchecked**: Step is created only for this customer (is_custom=true)
+   - **Checked**: Step is added to template AND all customers get this step immediately
+4. Set order position (insert before/after existing steps)
 
 ### 4.6 Execution Tracking
 
@@ -400,32 +410,82 @@ Customer-specific step instance (actual execution unit).
 └─────────────────────────────────────────────────────────────────┘
 ```
 
-### 5.7 Step Content Modal
+### 5.7 Step Detail Side Panel
+
+The side panel opens when clicking a step cell in the matrix view, showing customer-specific content and actions.
+
+**Side Panel Layout:**
+```
+┌──────────────────────────────────────────────────────────────────────────┐
+│  Release: v2.5.0                                              [X] Close │
+│  Step: Run Migration SQL                                                 │
+├──────────────────────────────────────────────────────────────────────────┤
+│  Customer: customer-a (prod-us/cust-a-prod)                              │
+│  Category: Deploy | Type: SQL | Status: 🔄 Pending                       │
+├──────────────────────────────────────────────────────────────────────────┤
+│                                                                          │
+│  SOURCE INFO:                                                            │
+│  ┌─────────────────────────────────────────────────────────────────┐    │
+│  │ 📋 From Template        [Override Content] [Reset to Template] │    │
+│  │ ⭐ Custom Step          [Edit] [Delete]                        │    │
+│  │ ⚠️ Overridden           [View Original] [Reset to Template]    │    │
+│  └─────────────────────────────────────────────────────────────────┘    │
+│                                                                          │
+│  CONTENT:                                                                │
+│  ┌─────────────────────────────────────────────────────────────────┐    │
+│  │ 1  │ -- Custom migration for customer-a                         │    │
+│  │ 2  │ ALTER TABLE users ADD COLUMN custom_field VARCHAR(100);    │    │
+│  │ 3  │ UPDATE users SET custom_field = 'value' WHERE id > 100;    │    │
+│  └─────────────────────────────────────────────────────────────────┘    │
+│  [📋 Copy] [⬇️ Download]                                                 │
+│                                                                          │
+│  EXECUTION:                                                              │
+│  ┌─────────────────────────────────────────────────────────────────┐    │
+│  │ Notes:                                                          │    │
+│  │ ┌─────────────────────────────────────────────────────────┐     │    │
+│  │ │ [Enter execution notes...                             ] │     │    │
+│  │ └─────────────────────────────────────────────────────────┘     │    │
+│  │                                                                  │    │
+│  │ [Mark as Done]  [Skip]  [Revert]                                │    │
+│  └─────────────────────────────────────────────────────────────────┘    │
+│                                                                          │
+│  HISTORY:                                                                │
+│  • 2024-01-15 10:30 - Created from template                              │
+│  • 2024-01-15 10:35 - Content overridden                                 │
+│  • 2024-01-15 10:45 - Marked as Done                                     │
+│                                                                          │
+└──────────────────────────────────────────────────────────────────────────┘
+```
+
+**Actions by Source Type:**
+| Source | Available Actions |
+|--------|-------------------|
+| Template (not overridden) | View, Copy, Mark Done, Skip, Override Content |
+| Overridden | View Custom, View Original, Reset to Template, Mark Done, Skip |
+| Custom Step | Edit, Delete, Mark Done, Skip |
+
+### 5.8 Add Custom Step Dialog
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
-│  Step: Run Migration SQL                              [X]       │
+│  Add Custom Step for customer-a                       [X]       │
 ├─────────────────────────────────────────────────────────────────┤
-│  Category: Deploy | Type: SQL                                   │
-│  Source: Template (edited for this customer)                    │
-│  Customer: customer-a (prod-us/cust-a-prod)                     │
-├─────────────────────────────────────────────────────────────────┤
+│  Step Name:                                                     │
+│  [                                                    ]         │
+│                                                                  │
+│  Category: [Deploy ▼]  Type: [Bash ▼]                           │
+│                                                                  │
+│  Content:                                                        │
 │  ┌─────────────────────────────────────────────────────────┐    │
-│  │ ```sql                                                  │    │
-│  │ -- Custom migration for customer-a                      │    │
-│  │ ALTER TABLE users ADD COLUMN custom_field VARCHAR(100); │    │
-│  │ UPDATE users SET custom_field = 'value' WHERE id > 100; │    │
-│  │ ```                                                     │    │
+│  │                                                         │    │
+│  │                                                         │    │
 │  └─────────────────────────────────────────────────────────┘    │
 │                                                                  │
-│  [📋 Copy] [⬇️ Download]                                        │
+│  Insert Position: [Before "Deploy App" ▼]                       │
 │                                                                  │
-│  ┌─────────────────────────────────────────────────────────┐    │
-│  │ Execution Notes:                                        │    │
-│  │ [Optional: Add notes about this execution...    ]       │    │
-│  └─────────────────────────────────────────────────────────┘    │
+│  ☐ Add to template (apply to all customers)                    │
 │                                                                  │
-│              [Cancel]  [Mark as Done]                           │
+│              [Cancel]  [Add Step]                               │
 └─────────────────────────────────────────────────────────────────┘
 ```
 
@@ -450,10 +510,17 @@ Customer-specific step instance (actual execution unit).
 - **BR-R04**: Reverting a step sets status to `reverted` but preserves history
 
 ### 6.4 Step Rules
-- **BR-S01**: Custom steps (is_custom=true) don't affect other customers or template
+- **BR-S01**: Custom steps (is_custom=true) don't affect other customers or template (unless "Add to template" is checked)
 - **BR-S02**: Override (is_overridden=true) preserves link to template for reference
 - **BR-S03**: Skipping requires mandatory reason
 - **BR-S04**: Order index is per category (deploy/verify have separate ordering)
+- **BR-S05**: Template steps use integer orderIndex (0, 1, 2...); custom steps use decimals (0.5, 1.5...) to insert between
+- **BR-S06**: When "Add to template" is checked during custom step creation:
+  - Step is added to step_templates table
+  - All active customers get this step immediately (for active releases)
+  - New customers will inherit this step automatically
+- **BR-S07**: Editing template steps after activation only affects customers where step is `pending` and not `overridden`
+- **BR-S08**: Customer-specific overrides persist even when template is edited
 
 ---
 

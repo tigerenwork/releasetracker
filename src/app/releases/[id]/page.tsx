@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import { notFound, redirect } from 'next/navigation';
-import { ArrowLeft, Edit, Play, Archive, Plus, CheckCircle, Circle, SkipForward, RotateCcw } from 'lucide-react';
+import { ArrowLeft, Edit, Play, Archive, Plus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -9,6 +9,7 @@ import { Separator } from '@/components/ui/separator';
 import { getReleaseById, activateRelease, archiveRelease } from '@/lib/actions/releases';
 import { getReleaseStepsGroupedByCluster, getStepStats } from '@/lib/actions/customer-steps';
 import { listCustomers } from '@/lib/actions/customers';
+import { ReleaseMatrixClient } from '@/components/releases/release-matrix-client';
 
 interface ReleaseDetailPageProps {
   params: Promise<{
@@ -202,7 +203,7 @@ export default async function ReleaseDetailPage({ params }: ReleaseDetailPagePro
           </TabsList>
 
           <TabsContent value="deploy" className="mt-4">
-            <MatrixView 
+            <ReleaseMatrixClient 
               stepsByCluster={stepsByCluster} 
               category="deploy"
               releaseId={releaseId}
@@ -210,153 +211,13 @@ export default async function ReleaseDetailPage({ params }: ReleaseDetailPagePro
           </TabsContent>
 
           <TabsContent value="verify" className="mt-4">
-            <MatrixView 
+            <ReleaseMatrixClient 
               stepsByCluster={stepsByCluster} 
               category="verify"
               releaseId={releaseId}
             />
           </TabsContent>
         </Tabs>
-      )}
-    </div>
-  );
-}
-
-interface MatrixViewProps {
-  stepsByCluster: any;
-  category: 'deploy' | 'verify';
-  releaseId: number;
-}
-
-function MatrixView({ stepsByCluster, category, releaseId }: MatrixViewProps) {
-  const clusters = Object.values(stepsByCluster);
-
-  if (clusters.length === 0) {
-    return (
-      <Card>
-        <CardContent className="py-8 text-center text-slate-500">
-          No customers found. Add customers to see the matrix view.
-        </CardContent>
-      </Card>
-    );
-  }
-
-  return (
-    <div className="space-y-6">
-      {clusters.map((clusterData: any) => {
-        const customers = Object.values(clusterData.customers);
-        
-        // Get all unique steps for this category
-        const allSteps = new Map();
-        customers.forEach((customer: any) => {
-          customer.steps
-            .filter((s: any) => s.category === category)
-            .forEach((step: any) => {
-              if (!allSteps.has(step.name)) {
-                allSteps.set(step.name, step);
-              }
-            });
-        });
-        const steps = Array.from(allSteps.values()).sort((a: any, b: any) => a.orderIndex - b.orderIndex);
-
-        if (steps.length === 0) return null;
-
-        return (
-          <Card key={clusterData.cluster?.id || 'unknown'}>
-            <CardHeader>
-              <CardTitle className="text-lg flex items-center gap-2">
-                <span className="w-3 h-3 bg-blue-500 rounded-full"></span>
-                {clusterData.cluster?.name || 'Unknown Cluster'}
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="overflow-x-auto">
-                <table className="w-full">
-                  <thead>
-                    <tr className="border-b">
-                      <th className="text-left py-2 px-3 font-medium text-slate-500 w-48">Step</th>
-                      {customers.map((customer: any) => (
-                        <th key={customer.customer.id} className="text-center py-2 px-3 font-medium text-slate-500 min-w-[120px]">
-                          <div>{customer.customer.name}</div>
-                          <div className="text-xs text-slate-400 font-normal">{customer.customer.namespace}</div>
-                        </th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {steps.map((step: any, stepIndex: number) => (
-                      <tr key={step.id} className="border-b hover:bg-slate-50">
-                        <td className="py-3 px-3">
-                          <div className="flex items-center gap-2">
-                            <span className="text-xs text-slate-400">{stepIndex + 1}.</span>
-                            <div>
-                              <p className="font-medium text-sm">{step.name}</p>
-                              {step.isOverridden && (
-                                <Badge variant="outline" className="text-xs">custom</Badge>
-                              )}
-                            </div>
-                          </div>
-                        </td>
-                        {customers.map((customer: any) => {
-                          const customerStep = customer.steps.find(
-                            (s: any) => s.name === step.name && s.category === category
-                          );
-                          
-                          if (!customerStep) return <td key={customer.customer.id} className="py-2 px-3"></td>;
-
-                          return (
-                            <td key={customer.customer.id} className="py-2 px-3 text-center">
-                              <StepStatusCell step={customerStep} releaseId={releaseId} />
-                            </td>
-                          );
-                        })}
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </CardContent>
-          </Card>
-        );
-      })}
-    </div>
-  );
-}
-
-function StepStatusCell({ step, releaseId }: { step: any; releaseId: number }) {
-  const statusIcons = {
-    pending: <Circle className="w-5 h-5 text-slate-300" />,
-    done: <CheckCircle className="w-5 h-5 text-green-500" />,
-    skipped: <SkipForward className="w-5 h-5 text-amber-500" />,
-    reverted: <RotateCcw className="w-5 h-5 text-red-500" />,
-  };
-
-  async function markDone() {
-    'use server';
-    const { markStepDone } = await import('@/lib/actions/customer-steps');
-    await markStepDone(step.id);
-  }
-
-  async function skipStep(formData: FormData) {
-    'use server';
-    const { skipStep } = await import('@/lib/actions/customer-steps');
-    await skipStep(step.id, formData.get('reason') as string);
-  }
-
-  return (
-    <div className="flex flex-col items-center gap-1">
-      <form action={markDone}>
-        <button type="submit" className="hover:scale-110 transition-transform">
-          {statusIcons[step.status as keyof typeof statusIcons]}
-        </button>
-      </form>
-      {step.status === 'pending' && (
-        <form action={skipStep} className="flex gap-1">
-          <input name="reason" type="hidden" value="Skipped by user" />
-          <button type="submit" className="text-xs text-slate-400 hover:text-amber-600">
-            skip
-          </button>
-        </form>
       )}
     </div>
   );

@@ -1,9 +1,9 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
-import { ArrowLeft, Plus, GripVertical, Trash2 } from 'lucide-react';
+import { ArrowLeft, Plus, GripVertical, Trash2, FileText } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -15,7 +15,23 @@ import {
   DialogTitle,
   DialogTrigger,
 } from '@/components/ui/dialog';
-import { useEffect } from 'react';
+import {
+  DndContext,
+  closestCenter,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  DragEndEvent,
+} from '@dnd-kit/core';
+import {
+  arrayMove,
+  SortableContext,
+  sortableKeyboardCoordinates,
+  useSortable,
+  verticalListSortingStrategy,
+} from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
 
 interface Step {
   id: number;
@@ -120,11 +136,25 @@ interface StepListProps {
 
 function StepList({ steps, category, releaseId, onUpdate }: StepListProps) {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [localSteps, setLocalSteps] = useState<Step[]>(steps);
+  const [isReordering, setIsReordering] = useState(false);
+
+  useEffect(() => {
+    setLocalSteps(steps);
+  }, [steps]);
+
+  const sensors = useSensors(
+    useSensor(PointerSensor),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
+    })
+  );
 
   async function handleAddStep(formData: FormData) {
     try {
       const response = await fetch('/api/steps', {
         method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           releaseId,
           category,
@@ -150,6 +180,45 @@ function StepList({ steps, category, releaseId, onUpdate }: StepListProps) {
       if (response.ok) onUpdate();
     } catch (error) {
       console.error(error);
+    }
+  }
+
+  async function handleDragEnd(event: DragEndEvent) {
+    const { active, over } = event;
+
+    if (over && active.id !== over.id) {
+      setIsReordering(true);
+      
+      const oldIndex = localSteps.findIndex((s) => s.id === active.id);
+      const newIndex = localSteps.findIndex((s) => s.id === over.id);
+      
+      const newSteps = arrayMove(localSteps, oldIndex, newIndex);
+      setLocalSteps(newSteps);
+
+      // Send reorder request to server
+      try {
+        const response = await fetch('/api/steps/reorder', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            releaseId,
+            category,
+            orderedIds: newSteps.map(s => s.id),
+          }),
+        });
+        
+        if (!response.ok) {
+          // Revert on error
+          setLocalSteps(steps);
+          alert('Failed to reorder steps');
+        }
+      } catch (error) {
+        console.error('Reorder error:', error);
+        setLocalSteps(steps);
+      } finally {
+        setIsReordering(false);
+        onUpdate();
+      }
     }
   }
 
@@ -195,41 +264,94 @@ function StepList({ steps, category, releaseId, onUpdate }: StepListProps) {
         </Dialog>
       </CardHeader>
       <CardContent>
-        {steps.length === 0 ? (
+        {localSteps.length === 0 ? (
           <p className="text-slate-500 text-center py-8">No {category} steps defined yet.</p>
         ) : (
-          <div className="space-y-2">
-            {steps.map((step, index) => (
-              <div
-                key={step.id}
-                className="flex items-center gap-3 p-3 bg-slate-50 rounded-lg border"
-              >
-                <GripVertical className="w-4 h-4 text-slate-400" />
-                <span className="text-sm text-slate-500 w-6">{index + 1}.</span>
-                <div className="flex-1">
-                  <div className="flex items-center gap-2">
-                    <span className="font-medium">{step.name}</span>
-                    <Badge variant="outline" className="text-xs capitalize">
-                      {step.type}
-                    </Badge>
-                  </div>
-                  {step.description && (
-                    <p className="text-sm text-slate-500">{step.description}</p>
-                  )}
-                </div>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-8 w-8 text-red-600"
-                  onClick={() => handleDeleteStep(step.id)}
-                >
-                  <Trash2 className="w-4 h-4" />
-                </Button>
+          <DndContext
+            sensors={sensors}
+            collisionDetection={closestCenter}
+            onDragEnd={handleDragEnd}
+          >
+            <SortableContext
+              items={localSteps.map(s => s.id)}
+              strategy={verticalListSortingStrategy}
+            >
+              <div className={`space-y-2 ${isReordering ? 'opacity-50' : ''}`}>
+                {localSteps.map((step, index) => (
+                  <SortableStepItem
+                    key={step.id}
+                    step={step}
+                    index={index}
+                    onDelete={() => handleDeleteStep(step.id)}
+                  />
+                ))}
               </div>
-            ))}
-          </div>
+            </SortableContext>
+          </DndContext>
         )}
       </CardContent>
     </Card>
+  );
+}
+
+interface SortableStepItemProps {
+  step: Step;
+  index: number;
+  onDelete: () => void;
+}
+
+function SortableStepItem({ step, index, onDelete }: SortableStepItemProps) {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id: step.id });
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    zIndex: isDragging ? 10 : 1,
+  };
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={style}
+      className={`flex items-center gap-3 p-3 bg-slate-50 rounded-lg border ${
+        isDragging ? 'shadow-lg ring-2 ring-blue-500' : ''
+      }`}
+    >
+      <button
+        {...attributes}
+        {...listeners}
+        className="cursor-grab active:cursor-grabbing"
+      >
+        <GripVertical className="w-4 h-4 text-slate-400" />
+      </button>
+      <span className="text-sm text-slate-500 w-6">{index + 1}.</span>
+      <div className="flex-1">
+        <div className="flex items-center gap-2">
+          <FileText className="w-4 h-4 text-slate-400" />
+          <span className="font-medium">{step.name}</span>
+          <Badge variant="outline" className="text-xs capitalize">
+            {step.type}
+          </Badge>
+        </div>
+        {step.description && (
+          <p className="text-sm text-slate-500">{step.description}</p>
+        )}
+      </div>
+      <Button
+        variant="ghost"
+        size="icon"
+        className="h-8 w-8 text-red-600"
+        onClick={onDelete}
+      >
+        <Trash2 className="w-4 h-4" />
+      </Button>
+    </div>
   );
 }

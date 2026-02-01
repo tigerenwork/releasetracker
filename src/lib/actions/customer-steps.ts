@@ -17,6 +17,7 @@ export type CustomStepInput = {
   type: StepType;
   content: string;
   orderIndex: number;
+  addToTemplate?: boolean;
 };
 
 export async function getCustomerSteps(releaseId: number, customerId: number) {
@@ -49,8 +50,53 @@ export async function addCustomStep(
   customerId: number,
   data: CustomStepInput
 ) {
+  const { addToTemplate, ...stepData } = data;
+  
+  // If addToTemplate is true, create template step first
+  if (addToTemplate) {
+    const { stepTemplates } = await import('@/lib/db/schema');
+    
+    const [template] = await db.insert(stepTemplates).values({
+      ...stepData,
+      releaseId,
+      description: null,
+    }).returning();
+    
+    // Add to ALL active customers
+    const allCustomers = await db.query.customers.findMany({
+      where: eq(customers.isActive, true),
+    });
+    
+    const stepsToInsert = allCustomers.map(customer => ({
+      releaseId,
+      customerId: customer.id,
+      templateId: template.id,
+      ...stepData,
+      status: 'pending' as const,
+      isCustom: false,
+      isOverridden: false,
+    }));
+    
+    if (stepsToInsert.length > 0) {
+      await db.insert(customerSteps).values(stepsToInsert);
+    }
+    
+    // Return the step for the requested customer
+    const [step] = await db.query.customerSteps.findMany({
+      where: and(
+        eq(customerSteps.releaseId, releaseId),
+        eq(customerSteps.customerId, customerId),
+        eq(customerSteps.templateId, template.id)
+      ),
+    });
+    
+    revalidatePath(`/releases/${releaseId}`);
+    return step;
+  }
+  
+  // Original behavior: custom step for single customer
   const [step] = await db.insert(customerSteps).values({
-    ...data,
+    ...stepData,
     releaseId,
     customerId,
     templateId: null,
@@ -143,6 +189,39 @@ export async function deleteCustomStep(stepId: number) {
   
   await db.delete(customerSteps).where(eq(customerSteps.id, stepId));
   revalidatePath(`/releases/${step.releaseId}`);
+}
+
+export async function editCustomStep(
+  stepId: number,
+  data: Partial<Omit<CustomStepInput, 'addToTemplate'>>
+) {
+  const step = await db.query.customerSteps.findFirst({
+    where: eq(customerSteps.id, stepId),
+  });
+  
+  if (!step) throw new Error('Step not found');
+  if (!step.isCustom) throw new Error('Cannot edit non-custom steps directly; use override instead');
+  
+  const [updated] = await db
+    .update(customerSteps)
+    .set({ ...data, updatedAt: new Date() })
+    .where(eq(customerSteps.id, stepId))
+    .returning();
+  
+  revalidatePath(`/releases/${step.releaseId}`);
+  return updated;
+}
+
+export async function getStepWithDetails(stepId: number) {
+  return db.query.customerSteps.findFirst({
+    where: eq(customerSteps.id, stepId),
+    with: {
+      customer: {
+        with: { cluster: true },
+      },
+      template: true,
+    },
+  });
 }
 
 export async function getReleaseStepsGroupedByCluster(releaseId: number) {

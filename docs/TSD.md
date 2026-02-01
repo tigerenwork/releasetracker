@@ -706,10 +706,56 @@ export async function addCustomStep(
     type: 'bash' | 'sql' | 'text';
     content: string;
     orderIndex: number;
+    addToTemplate?: boolean;  // NEW: Option to add to template
   }
 ): Promise<CustomerStep> {
+  const { addToTemplate, ...stepData } = data;
+  
+  // If addToTemplate is true, create template step first
+  let templateId: number | null = null;
+  
+  if (addToTemplate) {
+    const [template] = await db.insert(stepTemplates).values({
+      ...stepData,
+      releaseId,
+    }).returning();
+    templateId = template.id;
+    
+    // Add to ALL active customers (not just the current one)
+    const allCustomers = await db.query.customers.findMany({
+      where: eq(customers.isActive, true),
+    });
+    
+    const stepsToInsert = allCustomers.map(customer => ({
+      releaseId,
+      customerId: customer.id,
+      templateId: template.id,
+      ...stepData,
+      status: 'pending' as const,
+      isCustom: false,  // It's now a template step
+      isOverridden: false,
+    }));
+    
+    if (stepsToInsert.length > 0) {
+      await db.insert(customerSteps).values(stepsToInsert);
+    }
+    
+    // Return the step for the requested customer
+    const [step] = await db.query.customerSteps.findMany({
+      where: and(
+        eq(customerSteps.releaseId, releaseId),
+        eq(customerSteps.customerId, customerId),
+        eq(customerSteps.templateId, templateId)
+      ),
+    });
+    
+    revalidatePath(`/releases/${releaseId}`);
+    return step;
+  }
+  
+  // Original behavior: custom step for single customer
   const [step] = await db.insert(customerSteps).values({
-    ...data,
+    ...stepData,
     releaseId,
     customerId,
     templateId: null,
@@ -961,6 +1007,143 @@ export function StepCard({ step, ...actions }: StepCardProps) {
   // Shows cluster/namespace context
   // Actions based on current status
   // Modal for viewing full content
+}
+```
+
+### 6.3 Step Detail Side Panel (NEW)
+
+```typescript
+// components/steps/step-detail-panel.tsx
+
+import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
+import { CodeBlock } from './code-block';
+
+interface StepDetailPanelProps {
+  step: CustomerStep & { template?: StepTemplate; customer: Customer };
+  isOpen: boolean;
+  onClose: () => void;
+  onMarkDone: (id: number, notes?: string) => void;
+  onSkip: (id: number, reason: string) => void;
+  onRevert: (id: number, reason?: string) => void;
+  onOverride: (id: number, content: string) => void;
+  onResetToTemplate: (id: number) => void;
+  onEditCustom: (id: number, data: Partial<CustomStepInput>) => void;
+  onDeleteCustom: (id: number) => void;
+}
+
+export function StepDetailPanel({ step, isOpen, onClose, ...actions }: StepDetailPanelProps) {
+  // Side panel with:
+  // - Source info (template/custom/overridden)
+  // - Syntax-highlighted content
+  // - Action buttons based on source type
+  // - Execution notes input
+  // - History timeline
+}
+```
+
+### 6.4 Add Custom Step Dialog (NEW)
+
+```typescript
+// components/steps/add-custom-step-dialog.tsx
+
+interface AddCustomStepDialogProps {
+  releaseId: number;
+  customerId: number;
+  category: 'deploy' | 'verify';
+  existingSteps: { id: number; name: string; orderIndex: number }[];
+  isOpen: boolean;
+  onClose: () => void;
+  onAdd: (data: CustomStepInput & { addToTemplate: boolean; insertPosition: number }) => void;
+}
+
+export function AddCustomStepDialog({ ...props }: AddCustomStepDialogProps) {
+  // Dialog with:
+  // - Name, type, content inputs
+  // - Insert position dropdown (before/after existing steps)
+  // - "Add to template" checkbox (unchecked by default)
+  // - Add/Cancel buttons
+}
+```
+
+### 6.5 Draggable Step List (NEW)
+
+```typescript
+// components/steps/draggable-step-list.tsx
+
+import { DndContext, useDraggable, useDroppable } from '@dnd-kit/core';
+import { SortableContext, verticalListSortingStrategy } from '@dnd-kit/sortable';
+
+interface DraggableStepListProps {
+  steps: (StepTemplate | CustomerStep)[];
+  onReorder: (orderedIds: number[]) => void;
+  renderStep: (step: StepTemplate | CustomerStep, index: number) => React.ReactNode;
+}
+
+export function DraggableStepList({ steps, onReorder, renderStep }: DraggableStepListProps) {
+  // Drag-and-drop list using @dnd-kit
+  // Visual drag handle on each item
+  // Smooth animations
+  // Calls onReorder when drop completes
+}
+```
+
+### 6.6 Code Block with Syntax Highlight (NEW)
+
+```typescript
+// components/steps/code-block.tsx
+
+import Prism from 'prismjs';
+import 'prismjs/components/prism-sql';
+import 'prismjs/components/prism-bash';
+import 'prismjs/themes/prism-tomorrow.css';
+
+interface CodeBlockProps {
+  code: string;
+  type: 'bash' | 'sql' | 'text';
+  showLineNumbers?: boolean;
+}
+
+export function CodeBlock({ code, type, showLineNumbers = true }: CodeBlockProps) {
+  // Server-side or client-side syntax highlighting
+  // Copy to clipboard button
+  // Line numbers optional
+}
+```
+
+---
+
+## 6.7 API Endpoints (NEW)
+
+### Reorder Steps Endpoint
+
+```typescript
+// app/api/steps/reorder/route.ts
+
+import { NextRequest } from 'next/server';
+import { reorderSteps } from '@/lib/actions/step-templates';
+
+export async function POST(request: NextRequest) {
+  const { releaseId, category, orderedIds } = await request.json();
+  await reorderSteps(releaseId, category, orderedIds);
+  return Response.json({ success: true });
+}
+```
+
+### Get Step Detail Endpoint
+
+```typescript
+// app/api/steps/[id]/detail/route.ts
+
+import { NextRequest } from 'next/server';
+import { getStepWithDetails } from '@/lib/actions/customer-steps';
+
+export async function GET(
+  request: NextRequest,
+  { params }: { params: { id: string } }
+) {
+  const stepId = parseInt(params.id);
+  const step = await getStepWithDetails(stepId);
+  return Response.json(step);
 }
 ```
 
