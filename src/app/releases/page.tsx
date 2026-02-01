@@ -2,7 +2,7 @@ import Link from 'next/link';
 import { Plus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { ReleaseCard } from '@/components/releases/release-card';
+import { ReleaseList } from '@/components/releases/release-list';
 import { listReleases } from '@/lib/actions/releases';
 
 export default async function ReleasesPage() {
@@ -43,45 +43,15 @@ export default async function ReleasesPage() {
         </TabsList>
 
         <TabsContent value="active" className="mt-6">
-          {active.length === 0 ? (
-            <div className="text-center py-12 bg-white rounded-lg border border-dashed border-slate-300">
-              <p className="text-slate-600">No active releases.</p>
-            </div>
-          ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {active.map((release) => (
-                <ReleaseCard key={release.id} release={release} />
-              ))}
-            </div>
-          )}
+          <ReleaseList releases={active} />
         </TabsContent>
 
         <TabsContent value="draft" className="mt-6">
-          {drafts.length === 0 ? (
-            <div className="text-center py-12 bg-white rounded-lg border border-dashed border-slate-300">
-              <p className="text-slate-600">No draft releases.</p>
-            </div>
-          ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {drafts.map((release) => (
-                <ReleaseCard key={release.id} release={release} />
-              ))}
-            </div>
-          )}
+          <ReleaseList releases={drafts} />
         </TabsContent>
 
         <TabsContent value="archived" className="mt-6">
-          {archived.length === 0 ? (
-            <div className="text-center py-12 bg-white rounded-lg border border-dashed border-slate-300">
-              <p className="text-slate-600">No archived releases.</p>
-            </div>
-          ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {archived.map((release) => (
-                <ReleaseCard key={release.id} release={release} showActions={false} />
-              ))}
-            </div>
-          )}
+          <ReleaseList releases={archived} showActions={false} />
         </TabsContent>
       </Tabs>
     </div>
