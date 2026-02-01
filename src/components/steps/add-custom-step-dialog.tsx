@@ -60,7 +60,7 @@ export function AddCustomStepDialog({
   const [name, setName] = useState('');
   const [type, setType] = useState<'bash' | 'sql' | 'text'>('bash');
   const [content, setContent] = useState('');
-  const [insertAfterId, setInsertAfterId] = useState<string>('');
+  const [insertAfterId, setInsertAfterId] = useState<string>('__start__');
   const [addToTemplate, setAddToTemplate] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -76,7 +76,7 @@ export function AddCustomStepDialog({
 
     // Calculate orderIndex based on insert position
     let orderIndex = existingSteps.length;
-    if (insertAfterId) {
+    if (insertAfterId && insertAfterId !== '__start__') {
       const afterStep = existingSteps.find(s => s.id.toString() === insertAfterId);
       if (afterStep) {
         // Use decimal to insert between (e.g., if after step with index 1, use 1.5)
@@ -87,7 +87,7 @@ export function AddCustomStepDialog({
           orderIndex = afterStep.orderIndex + 1;
         }
       }
-    } else if (existingSteps.length > 0) {
+    } else if (insertAfterId === '__start__' && existingSteps.length > 0) {
       // Insert at beginning - use negative decimal or 0.5 before first
       const firstStep = existingSteps[0];
       orderIndex = firstStep.orderIndex / 2;
@@ -170,7 +170,7 @@ export function AddCustomStepDialog({
                   <SelectValue placeholder="At the beginning" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">At the beginning</SelectItem>
+                  <SelectItem value="__start__">At the beginning</SelectItem>
                   {existingSteps.map((step) => (
                     <SelectItem key={step.id} value={step.id.toString()}>
                       After: {step.name}
