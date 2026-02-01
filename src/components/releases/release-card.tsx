@@ -89,7 +89,7 @@ export function ReleaseCard({ release, showActions = true }: ReleaseCardProps) {
   }
 
   return (
-    <Card>
+    <Card className="flex flex-col h-full">
       <CardHeader className="pb-3">
         <div className="flex items-start justify-between">
           <div className="flex items-center gap-3">
@@ -170,21 +170,23 @@ export function ReleaseCard({ release, showActions = true }: ReleaseCardProps) {
           )}
         </div>
       </CardHeader>
-      <CardContent>
-        {release.versionNumber && (
-          <div className="text-sm text-slate-600 mb-2">
-            <span className="font-medium">Version:</span> {release.versionNumber}
-          </div>
-        )}
-        {release.releaseDate && (
-          <div className="text-sm text-slate-600 mb-2">
-            <span className="font-medium">Release Date:</span>{' '}
-            {new Date(release.releaseDate).toLocaleDateString()}
-          </div>
-        )}
-        {release.description && (
-          <p className="text-sm text-slate-600 line-clamp-2">{release.description}</p>
-        )}
+      <CardContent className="flex flex-col flex-grow">
+        <div className="flex-grow">
+          {release.versionNumber && (
+            <div className="text-sm text-slate-600 mb-2">
+              <span className="font-medium">Version:</span> {release.versionNumber}
+            </div>
+          )}
+          {release.releaseDate && (
+            <div className="text-sm text-slate-600 mb-2">
+              <span className="font-medium">Release Date:</span>{' '}
+              {new Date(release.releaseDate).toLocaleDateString()}
+            </div>
+          )}
+          {release.description && (
+            <p className="text-sm text-slate-600 line-clamp-2">{release.description}</p>
+          )}
+        </div>
         <div className="mt-4 pt-4 border-t">
           <Link href={`/releases/${release.id}`}>
             <Button variant="outline" size="sm" className="w-full">

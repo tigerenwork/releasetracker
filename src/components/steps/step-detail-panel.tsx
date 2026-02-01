@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { X, RotateCcw, Pencil, Trash2, FileText, AlertCircle, CheckCircle, Check, SkipForward } from 'lucide-react';
+import { X, RotateCcw, Pencil, Trash2, FileText, AlertCircle, CheckCircle, Check, SkipForward, Copy } from 'lucide-react';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -170,7 +170,7 @@ export function StepDetailPanel({
   return (
     <Sheet open={isOpen} onOpenChange={onClose}>
       <SheetContent className="w-[600px] sm:max-w-[600px]">
-        <SheetHeader>
+        <SheetHeader className="px-6">
           <div className="flex items-start justify-between">
             <div>
               <SheetTitle className="text-xl mb-2">{step.name}</SheetTitle>
@@ -185,8 +185,8 @@ export function StepDetailPanel({
           </div>
         </SheetHeader>
 
-        <ScrollArea className="h-[calc(100vh-180px)] mt-6">
-          <div className="space-y-6 pr-4">
+        <ScrollArea className="h-[calc(100vh-180px)] mt-6 px-6">
+          <div className="space-y-6">
             {/* Status & Type */}
             <div className="flex items-center gap-4">
               <div className="flex items-center gap-2">
@@ -207,7 +207,20 @@ export function StepDetailPanel({
 
             {/* Content */}
             <div>
-              <label className="text-sm font-medium text-slate-500 mb-2 block">Content</label>
+              <div className="flex items-center justify-between mb-2">
+                <label className="text-sm font-medium text-slate-500">Content</label>
+                {!isEditing && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => navigator.clipboard.writeText(step.content)}
+                    className="h-7 px-2 text-slate-500 hover:text-slate-700"
+                  >
+                    <Copy className="w-3.5 h-3.5 mr-1" />
+                    Copy
+                  </Button>
+                )}
+              </div>
               
               {isEditing ? (
                 <div className="space-y-3">
