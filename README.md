@@ -1,36 +1,98 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Release Orchestration & Tracking System
+
+A web application to manage, track, and execute multi-customer deployment workflows across multiple Kubernetes clusters.
+
+## Features
+
+- **Multi-Cluster Support**: Manage multiple K8s clusters, each hosting one or more customers
+- **Customer Management**: Organize customers by cluster with namespace isolation
+- **Release Management**: Create and track releases of different types (onboarding, regular release, hotfix)
+- **Step Templates**: Define common deployment and verification steps
+- **Customer-Specific Customization**: Override or add custom steps per customer
+- **Matrix View**: Visual progress tracking across all customers and clusters
+- **Execution Tracking**: Mark steps as done, skipped, or reverted with notes
+
+## Tech Stack
+
+- **Framework**: Next.js 14+ (App Router)
+- **Language**: TypeScript
+- **Database**: SQLite (via better-sqlite3)
+- **ORM**: Drizzle ORM
+- **Styling**: Tailwind CSS
+- **UI Components**: shadcn/ui
 
 ## Getting Started
 
-First, run the development server:
+### Prerequisites
 
+- Node.js 20.x or higher
+- npm or yarn
+
+### Installation
+
+1. Install dependencies:
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+npm install
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+2. Run the development server:
+```bash
+npm run dev
+```
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+3. Open [http://localhost:3000](http://localhost:3000) in your browser.
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+### Database
 
-## Learn More
+The application uses SQLite with a local database file stored in `data/app.db`. The database schema is automatically initialized on first run.
 
-To learn more about Next.js, take a look at the following resources:
+## Usage
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+### 1. Setup Your Infrastructure
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+1. **Create Clusters**: Go to Clusters page and add your Kubernetes clusters
+2. **Add Customers**: For each cluster, add customers with their namespaces
 
-## Deploy on Vercel
+### 2. Create a Release
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+1. Go to Releases page and click "Create Release"
+2. Choose release type:
+   - **Onboarding**: For new customer setup
+   - **Regular Release**: Standard deployment with version number
+   - **Hotfix**: Emergency fixes
+3. Define deployment and verification steps
+4. Activate the release to generate customer steps
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+### 3. Track Progress
+
+1. View the matrix visualization to see all customers' progress
+2. Click on individual steps to mark them as done or skipped
+3. Override step content for specific customers if needed
+
+## Project Structure
+
+```
+my-app/
+├── src/
+│   ├── app/              # Next.js pages
+│   ├── components/       # React components
+│   ├── lib/
+│   │   ├── actions/      # Server Actions
+│   │   ├── db/           # Database schema and connection
+│   │   └── utils/        # Utilities
+├── data/                 # SQLite database
+└── docs/                 # Documentation (FSD, TSD)
+```
+
+## Future Enhancements
+
+- Auto-execution of bash/SQL scripts via K8s agents
+- Multi-user support with authentication
+- Audit logging
+- Jenkins/Rancher API integrations
+- Email notifications
+- Scheduled releases
+
+## License
+
+MIT
