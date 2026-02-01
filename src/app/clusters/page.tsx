@@ -3,9 +3,6 @@ import { Plus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { ClusterCard } from '@/components/clusters/cluster-card';
 import { listClusters } from '@/lib/actions/clusters';
-import { db } from '@/lib/db';
-import { customers } from '@/lib/db/schema';
-import { eq, count } from 'drizzle-orm';
 
 export default async function ClustersPage() {
   const clusters = await listClusters();
@@ -13,13 +10,12 @@ export default async function ClustersPage() {
   // Get customer counts for each cluster
   const clustersWithCount = await Promise.all(
     clusters.map(async (cluster) => {
-      const result = await db
-        .select({ value: count() })
-        .from(customers)
-        .where(eq(customers.clusterId, cluster.id));
+      // Use the server action to get customer count
+      const { listCustomersByCluster } = await import('@/lib/actions/customers');
+      const customers = await listCustomersByCluster(cluster.id);
       return {
         ...cluster,
-        customerCount: result[0]?.value || 0,
+        customerCount: customers.length,
       };
     })
   );

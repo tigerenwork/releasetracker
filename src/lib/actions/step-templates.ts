@@ -116,13 +116,16 @@ export async function getStepTemplatesByCategory(releaseId: number, category: St
 }
 
 export async function getNextOrderIndex(releaseId: number, category: StepCategory) {
-  const result = await db
-    .select({ maxOrder: { value: stepTemplates.orderIndex } })
-    .from(stepTemplates)
-    .where(and(
+  const templates = await db.query.stepTemplates.findMany({
+    where: and(
       eq(stepTemplates.releaseId, releaseId),
       eq(stepTemplates.category, category)
-    ));
+    ),
+  });
   
-  return (result[0]?.maxOrder?.value ?? -1) + 1;
+  const maxOrder = templates.length > 0 
+    ? Math.max(...templates.map(t => t.orderIndex))
+    : -1;
+  
+  return maxOrder + 1;
 }

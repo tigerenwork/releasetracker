@@ -2,7 +2,7 @@
 
 import { db } from '@/lib/db';
 import { clusters, customers } from '@/lib/db/schema';
-import { eq, and, count } from 'drizzle-orm';
+import { eq, and } from 'drizzle-orm';
 import { revalidatePath } from 'next/cache';
 
 export type ClusterInput = {
@@ -33,18 +33,15 @@ export async function updateCluster(id: number, data: Partial<ClusterInput>) {
 
 export async function deleteCluster(id: number) {
   // Check if cluster has active customers
-  const result = await db
-    .select({ count: count() })
-    .from(customers)
-    .where(and(
+  const activeCustomers = await db.query.customers.findMany({
+    where: and(
       eq(customers.clusterId, id),
       eq(customers.isActive, true)
-    ));
+    ),
+  });
   
-  const customerCount = result[0]?.count || 0;
-  
-  if (customerCount > 0) {
-    throw new Error(`Cannot delete cluster: ${customerCount} active customer(s) exist. Please move or delete customers first.`);
+  if (activeCustomers.length > 0) {
+    throw new Error(`Cannot delete cluster: ${activeCustomers.length} active customer(s) exist. Please move or delete customers first.`);
   }
   
   await db.update(clusters)

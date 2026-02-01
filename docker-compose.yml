@@ -1,0 +1,20 @@
+services:
+  release-tracker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      platforms:
+        - linux/amd64
+    container_name: release-tracker
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=production
+      - DB_TYPE=sqlite
+      - DATABASE_URL=file:/app/data/app.db
+    volumes:
+      # Mount the data directory for SQLite persistence
+      - ./data:/app/data
+    # Run as root (uid=0, gid=0) - default behavior
+    # user: "0:0"

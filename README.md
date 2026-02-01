@@ -16,8 +16,8 @@ A web application to manage, track, and execute multi-customer deployment workfl
 
 - **Framework**: Next.js 14+ (App Router)
 - **Language**: TypeScript
-- **Database**: SQLite (via better-sqlite3)
-- **ORM**: Drizzle ORM
+- **Database**: SQLite (local) or Turso (cloud)
+- **ORM**: Drizzle ORM (supports both SQLite and LibSQL)
 - **Styling**: Tailwind CSS
 - **UI Components**: shadcn/ui
 
@@ -45,6 +45,32 @@ npm run dev
 ### Database
 
 The application uses SQLite with a local database file stored in `data/app.db`. The database schema is automatically initialized on first run.
+
+## Deployment
+
+### Option 1: Docker Compose (Self-Hosted)
+
+```bash
+# Build and run
+docker compose up -d
+
+# View logs
+docker compose logs -f
+```
+
+Data is persisted in `./data/app.db` via Docker volume.
+
+### Option 2: Vercel + Turso (Cloud)
+
+1. Sign up at [Vercel](https://vercel.com) and [Turso](https://turso.tech)
+2. Connect your Git repository to Vercel
+3. Set environment variables in Vercel dashboard:
+   - `DB_TYPE=turso`
+   - `TURSO_URL=libsql://your-db.turso.io`
+   - `TURSO_TOKEN=your-token`
+4. Deploy automatically on git push
+
+See [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) for detailed instructions.
 
 ## Usage
 

@@ -160,27 +160,17 @@ export async function getReleaseStats() {
   const allReleases = await db.query.releases.findMany();
   const activeReleases = allReleases.filter(r => r.status === 'active');
   
-  // Count total customer steps that are pending
-  const pendingSteps = await db
-    .select({ count: { value: customerSteps.id } })
-    .from(customerSteps)
-    .where(eq(customerSteps.status, 'pending'));
-  
-  const doneSteps = await db
-    .select({ count: { value: customerSteps.id } })
-    .from(customerSteps)
-    .where(eq(customerSteps.status, 'done'));
-  
-  const skippedSteps = await db
-    .select({ count: { value: customerSteps.id } })
-    .from(customerSteps)
-    .where(eq(customerSteps.status, 'skipped'));
+  // Count total customer steps by status
+  const allSteps = await db.query.customerSteps.findMany();
+  const pendingSteps = allSteps.filter(s => s.status === 'pending').length;
+  const doneSteps = allSteps.filter(s => s.status === 'done').length;
+  const skippedSteps = allSteps.filter(s => s.status === 'skipped').length;
 
   return {
     totalReleases: allReleases.length,
     activeReleases: activeReleases.length,
-    pendingSteps: pendingSteps[0]?.count?.value || 0,
-    doneSteps: doneSteps[0]?.count?.value || 0,
-    skippedSteps: skippedSteps[0]?.count?.value || 0,
+    pendingSteps,
+    doneSteps,
+    skippedSteps,
   };
 }

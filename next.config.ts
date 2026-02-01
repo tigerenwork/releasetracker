@@ -6,6 +6,8 @@ const nextConfig: NextConfig = {
       bodySizeLimit: '2mb',
     },
   },
+  // Enable standalone output for Docker deployment
+  output: 'standalone',
   // Disable turbopack for now since we need webpack config for better-sqlite3
   turbopack: {},
 };

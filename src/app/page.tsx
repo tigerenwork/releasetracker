@@ -4,11 +4,8 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { listClusters } from '@/lib/actions/clusters';
-import { listCustomers } from '@/lib/actions/customers';
+import { listCustomers, listCustomersByCluster } from '@/lib/actions/customers';
 import { getActiveReleases, getReleaseStats } from '@/lib/actions/releases';
-import { db } from '@/lib/db';
-import { customers } from '@/lib/db/schema';
-import { eq, count } from 'drizzle-orm';
 
 export default async function DashboardPage() {
   const [clusters, customersList, activeReleases, stats] = await Promise.all([
@@ -21,13 +18,10 @@ export default async function DashboardPage() {
   // Get customer counts per cluster
   const clustersWithCount = await Promise.all(
     clusters.map(async (cluster) => {
-      const result = await db
-        .select({ value: count() })
-        .from(customers)
-        .where(eq(customers.clusterId, cluster.id));
+      const customers = await listCustomersByCluster(cluster.id);
       return {
         ...cluster,
-        customerCount: result[0]?.value || 0,
+        customerCount: customers.length,
       };
     })
   );
