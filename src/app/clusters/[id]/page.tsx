@@ -11,6 +11,8 @@ interface ClusterDetailPageProps {
   }>;
 }
 
+export const dynamic = 'force-dynamic';
+
 export default async function ClusterDetailPage({ params }: ClusterDetailPageProps) {
   const { id } = await params;
   const cluster = await getClusterWithCustomers(parseInt(id));

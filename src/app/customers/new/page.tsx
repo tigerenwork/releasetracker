@@ -2,6 +2,9 @@ import { notFound } from 'next/navigation';
 import { CustomerForm } from '@/components/customers/customer-form';
 import { listClusters } from '@/lib/actions/clusters';
 
+// Force dynamic rendering to ensure data is fetched at request time
+export const dynamic = 'force-dynamic';
+
 export default async function NewCustomerPage() {
   const clusters = await listClusters();
 

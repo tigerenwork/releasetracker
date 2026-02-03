@@ -8,6 +8,8 @@ interface EditReleasePageProps {
   }>;
 }
 
+export const dynamic = 'force-dynamic';
+
 export default async function EditReleasePage({ params }: EditReleasePageProps) {
   const { id } = await params;
   const release = await getReleaseById(parseInt(id));

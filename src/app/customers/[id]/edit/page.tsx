@@ -9,6 +9,8 @@ interface EditCustomerPageProps {
   }>;
 }
 
+export const dynamic = 'force-dynamic';
+
 export default async function EditCustomerPage({ params }: EditCustomerPageProps) {
   const { id } = await params;
   const [customer, clusters] = await Promise.all([

@@ -8,6 +8,8 @@ interface EditClusterPageProps {
   }>;
 }
 
+export const dynamic = 'force-dynamic';
+
 export default async function EditClusterPage({ params }: EditClusterPageProps) {
   const { id } = await params;
   const cluster = await getClusterById(parseInt(id));
