@@ -71,13 +71,13 @@ export function CodeBlock({ code, type, showLineNumbers = true }: CodeBlockProps
             <div className="flex">
               {/* Line numbers column */}
               <div className="flex flex-col text-slate-500 text-right pr-4 select-none min-w-[3rem]">
-                {lines.map((_, i) => (
+                {lines.map((_: string, i: number) => (
                   <span key={i}>{i + 1}</span>
                 ))}
               </div>
               {/* Code column */}
               <div className="flex flex-col">
-                {highlightedLines.map((line, i) => (
+                {highlightedLines.map((line: string, i: number) => (
                   <span 
                     key={i} 
                     className="text-slate-100 whitespace-pre"
