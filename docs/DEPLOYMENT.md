@@ -156,13 +156,17 @@ sudo docker compose up -d
 3. **Set Environment Variables**:
    In the Vercel dashboard, go to Project Settings → Environment Variables, add:
 
-   | Variable | Value |
-   |----------|-------|
-   | `DB_TYPE` | `turso` |
-   | `TURSO_URL` | Your Turso database URL |
-   | `TURSO_TOKEN` | Your Turso auth token |
+   | Variable | Value | Required |
+   |----------|-------|----------|
+   | `DB_TYPE` | `turso` | Yes |
+   | `TURSO_URL` | Your Turso database URL | Yes |
+   | `TURSO_TOKEN` | Your Turso auth token | Yes |
+   | `ENABLE_PASSCODE` | `true` (recommended for public sites) | No (default: false) |
+   | `PASSCODE` | Your secret passcode | If ENABLE_PASSCODE=true |
 
    > **Note**: The build process will automatically run database migrations using the `prebuild` script. Make sure the environment variables are set before the first build.
+   > 
+   > **Security**: For public deployments, set `ENABLE_PASSCODE=true` and `PASSCODE` to protect the application with a simple passcode. The cookie lasts 7 days.
 
 4. **Deploy**:
    - Click "Deploy"
@@ -252,6 +256,22 @@ sudo docker compose up -d
 **Issue**: Data doesn't persist between deployments  
 **Solution**: This is expected with SQLite on Vercel. You must use Turso for persistence.
 
+**Issue**: Passcode not working  
+**Solution**: 
+   - Ensure both `ENABLE_PASSCODE=true` and `PASSCODE` are set
+   - The passcode is case-sensitive
+   - Clear browser cookies and try again
+   - Check browser console for API errors
+
+### Authentication Issues
+
+**Issue**: Cannot access site even with correct passcode  
+**Solution**: 
+   - Check that cookies are enabled in your browser
+   - Try accessing in an incognito/private window
+   - Verify the `AUTH_COOKIE_NAME` hasn't changed between deployments
+   - The cookie is set to expire after 7 days; if you cleared cookies, you'll need to re-enter the passcode
+
 ### Turso Issues
 
 **Issue**: Connection refused or timeout  
@@ -288,20 +308,46 @@ Note: Some SQLite-specific syntax may need adjustment for Turso compatibility.
 
 ---
 
-## Security Considerations
+## Authentication
 
-### Docker Deployment
+The application supports optional passcode-based authentication, controlled by environment variables.
 
-- Container runs as root (uid=0) by design for simplicity
-- SQLite database file is owned by root
-- Ensure proper firewall rules on your server
-- Consider using HTTPS reverse proxy (nginx/traefik)
+### Configuration
 
-### Vercel Deployment
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `ENABLE_PASSCODE` | Enable passcode protection | `false` |
+| `PASSCODE` | The secret passcode | - |
+| `AUTH_COOKIE_NAME` | Name of the auth cookie | `release_tracker_auth` |
 
-- Turso provides encryption at rest and in transit
-- Vercel provides HTTPS by default
-- Keep `TURSO_TOKEN` secure and rotate periodically
+### Use Cases
+
+**Private Docker Deployment** (no auth needed):
+```bash
+ENABLE_PASSCODE=false
+```
+
+**Public Vercel Deployment** (auth required):
+```bash
+ENABLE_PASSCODE=true
+PASSCODE=your-secure-passcode-here
+```
+
+### How It Works
+
+1. When `ENABLE_PASSCODE=true`, all routes require authentication
+2. Users are redirected to `/login` page
+3. After entering the correct passcode, a 7-day cookie is set
+4. Cookie is `httpOnly`, `secure` (in production), and `SameSite=strict`
+5. No logout functionality (users must clear cookies or wait 7 days)
+
+### Security Considerations
+
+- Passcode is never sent to the client (verified server-side)
+- Cookie cannot be accessed by JavaScript (`httpOnly`)
+- Cookie is only sent over HTTPS in production (`secure`)
+- Cookie expires after 7 days (`maxAge: 604800`)
+- Single passcode for all users (simple but not suitable for multi-user scenarios)
 
 ---
 

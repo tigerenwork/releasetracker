@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { X, RotateCcw, Pencil, Trash2, FileText, AlertCircle, CheckCircle, Check, SkipForward, Copy } from 'lucide-react';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { Button } from '@/components/ui/button';
@@ -64,12 +64,32 @@ export function StepDetailPanel({
   onEditCustom,
   onDeleteCustom,
 }: StepDetailPanelProps) {
-  const [notes, setNotes] = useState(step?.notes || '');
+  const [notes, setNotes] = useState('');
   const [isEditing, setIsEditing] = useState(false);
-  const [editContent, setEditContent] = useState(step?.content || '');
+  const [editContent, setEditContent] = useState('');
   const [showOriginal, setShowOriginal] = useState(false);
   const [skipReason, setSkipReason] = useState('');
   const [isSkipping, setIsSkipping] = useState(false);
+
+  // Sync state when step changes
+  useEffect(() => {
+    console.log('[StepDetailPanel] useEffect triggered, step?.id:', step?.id);
+    if (step) {
+      console.log('[StepDetailPanel] Syncing state with step:', {
+        stepId: step.id,
+        stepName: step.name,
+        stepContent: step.content?.substring(0, 50),
+      });
+      setNotes(step.notes || '');
+      setEditContent(step.content || '');
+      setIsEditing(false);
+      setShowOriginal(false);
+      setSkipReason('');
+      setIsSkipping(false);
+    }
+  }, [step?.id]);
+
+  console.log('[StepDetailPanel] Render - step:', step?.id, 'step.content:', step?.content?.substring(0, 50), 'editContent:', editContent?.substring(0, 50));
 
   if (!step) return null;
 
@@ -169,7 +189,7 @@ export function StepDetailPanel({
 
   return (
     <Sheet open={isOpen} onOpenChange={onClose}>
-      <SheetContent className="w-[600px] sm:max-w-[600px]">
+      <SheetContent key={step?.id} className="w-[600px] sm:max-w-[600px]">
         <SheetHeader className="px-6">
           <div className="flex items-start justify-between">
             <div>

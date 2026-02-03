@@ -30,6 +30,13 @@ export function ReleaseMatrixClient({ stepsByCluster, category, releaseId }: Rel
   const clusters = Object.values(stepsByCluster);
 
   const handleStepClick = (step: any, template: any = null) => {
+    console.log('[ReleaseMatrixClient] handleStepClick called:', {
+      stepId: step?.id,
+      stepName: step?.name,
+      stepContent: step?.content?.substring(0, 50),
+      templateId: template?.id,
+      templateContent: template?.content?.substring(0, 50),
+    });
     setSelectedStep(step);
     setSelectedTemplate(template);
     setIsPanelOpen(true);

@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useState, useMemo } from 'react';
 import { Copy, Check } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 
@@ -11,15 +11,17 @@ interface CodeBlockProps {
 }
 
 export function CodeBlock({ code, type, showLineNumbers = true }: CodeBlockProps) {
-  const [highlighted, setHighlighted] = useState<string>('');
+  console.log('[CodeBlock] Render - code length:', code?.length, 'code preview:', code?.substring(0, 50), 'type:', type);
+  
   const [copied, setCopied] = useState(false);
 
-  useEffect(() => {
-    async function highlight() {
+  // Compute highlighted code synchronously
+  const highlighted = useMemo(() => {
+    if (!code) return '';
+    try {
       // eslint-disable-next-line @typescript-eslint/no-require-imports
       const Prism = require('prismjs');
       
-      // Load language components dynamically
       if (type === 'sql') {
         // eslint-disable-next-line @typescript-eslint/no-require-imports
         require('prismjs/components/prism-sql');
@@ -30,12 +32,14 @@ export function CodeBlock({ code, type, showLineNumbers = true }: CodeBlockProps
 
       const language = type === 'text' ? 'text' : type;
       const grammar = Prism.languages[language] || Prism.languages.text;
-      const highlightedCode = Prism.highlight(code, grammar, language);
-      setHighlighted(highlightedCode);
+      return Prism.highlight(code, grammar, language);
+    } catch (e) {
+      console.error('[CodeBlock] Prism error:', e);
+      return code.replace(/</g, '&lt;').replace(/>/g, '&gt;');
     }
-
-    highlight();
   }, [code, type]);
+
+  console.log('[CodeBlock] highlighted length:', highlighted?.length);
 
   const handleCopy = async () => {
     await navigator.clipboard.writeText(code);
@@ -43,14 +47,16 @@ export function CodeBlock({ code, type, showLineNumbers = true }: CodeBlockProps
     setTimeout(() => setCopied(false), 2000);
   };
 
-  const lines = code.split('\n');
+  // Split code into lines for line numbers
+  const lines = code ? code.split('\n') : [];
+  const highlightedLines = highlighted ? highlighted.split('\n') : [];
 
   return (
     <div className="relative group">
       <Button
         variant="ghost"
         size="sm"
-        className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity"
+        className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity z-10"
         onClick={handleCopy}
       >
         {copied ? (
@@ -59,33 +65,35 @@ export function CodeBlock({ code, type, showLineNumbers = true }: CodeBlockProps
           <Copy className="w-4 h-4" />
         )}
       </Button>
-      <pre className="rounded-lg bg-slate-900 p-4 overflow-x-auto text-sm">
-        <code className="language-{type}">
+      <div className="rounded-lg bg-slate-900 p-4 overflow-x-auto text-sm">
+        <pre className={`language-${type} m-0`}>
           {showLineNumbers ? (
-            <table className="border-collapse">
-              <tbody>
-                {lines.map((line, i) => (
-                  <tr key={i}>
-                    <td className="text-slate-500 text-right pr-4 select-none w-12">
-                      {i + 1}
-                    </td>
-                    <td 
-                      className="text-slate-100"
-                      dangerouslySetInnerHTML={{ 
-                        __html: highlighted 
-                          ? highlighted.split('\n')[i] || ''
-                          : line 
-                      }} 
-                    />
-                  </tr>
+            <div className="flex">
+              {/* Line numbers column */}
+              <div className="flex flex-col text-slate-500 text-right pr-4 select-none min-w-[3rem]">
+                {lines.map((_, i) => (
+                  <span key={i}>{i + 1}</span>
                 ))}
-              </tbody>
-            </table>
+              </div>
+              {/* Code column */}
+              <div className="flex flex-col">
+                {highlightedLines.map((line, i) => (
+                  <span 
+                    key={i} 
+                    className="text-slate-100 whitespace-pre"
+                    dangerouslySetInnerHTML={{ __html: line || ' ' }}
+                  />
+                ))}
+              </div>
+            </div>
           ) : (
-            <span dangerouslySetInnerHTML={{ __html: highlighted || code }} />
+            <code 
+              className="text-slate-100 whitespace-pre"
+              dangerouslySetInnerHTML={{ __html: highlighted || code || '' }}
+            />
           )}
-        </code>
-      </pre>
+        </pre>
+      </div>
     </div>
   );
 }
