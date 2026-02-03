@@ -1,15 +1,16 @@
 import Link from 'next/link';
-import { notFound, redirect } from 'next/navigation';
-import { ArrowLeft, Edit, Play, Archive, Plus } from 'lucide-react';
+import { notFound } from 'next/navigation';
+import { ArrowLeft, Edit } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Separator } from '@/components/ui/separator';
-import { getReleaseById, activateRelease, archiveRelease } from '@/lib/actions/releases';
+import { getReleaseById } from '@/lib/actions/releases';
 import { getReleaseStepsGroupedByCluster, getStepStats } from '@/lib/actions/customer-steps';
 import { listCustomers } from '@/lib/actions/customers';
 import { ReleaseMatrixClient } from '@/components/releases/release-matrix-client';
+import { ReleaseActions } from '@/components/releases/release-actions';
 
 interface ReleaseDetailPageProps {
   params: Promise<{
@@ -57,19 +58,14 @@ export default async function ReleaseDetailPage({ params }: ReleaseDetailPagePro
     ? await getStepStats(releaseId)
     : { total: 0, done: 0, skipped: 0, pending: 0, reverted: 0, percentage: 0 };
 
-  const customers = await listCustomers();
+  const allCustomers = await listCustomers();
 
-  async function handleActivate() {
-    'use server';
-    await activateRelease(releaseId);
-    redirect(`/releases/${releaseId}`);
-  }
-
-  async function handleArchive() {
-    'use server';
-    await archiveRelease(releaseId);
-    redirect(`/releases/${releaseId}`);
-  }
+  // Get customer IDs already in this release
+  const existingCustomerIds = Object.values(stepsByCluster).flatMap((clusterData: any) =>
+    Object.values(clusterData.customers as Record<string, { customer: { id: number } }>).map(
+      (c: { customer: { id: number } }) => c.customer.id
+    )
+  );
 
   return (
     <div className="space-y-6">
@@ -99,22 +95,13 @@ export default async function ReleaseDetailPage({ params }: ReleaseDetailPagePro
               Edit
             </Button>
           </Link>
-          {release.status === 'draft' && (
-            <form action={handleActivate}>
-              <Button size="sm" type="submit">
-                <Play className="w-4 h-4 mr-2" />
-                Activate
-              </Button>
-            </form>
-          )}
-          {release.status === 'active' && (
-            <form action={handleArchive}>
-              <Button variant="outline" size="sm" type="submit">
-                <Archive className="w-4 h-4 mr-2" />
-                Archive
-              </Button>
-            </form>
-          )}
+          <ReleaseActions
+            releaseId={releaseId}
+            releaseName={release.name}
+            releaseStatus={release.status}
+            allCustomers={allCustomers}
+            existingCustomerIds={existingCustomerIds}
+          />
         </div>
       </div>
 
@@ -132,7 +119,14 @@ export default async function ReleaseDetailPage({ params }: ReleaseDetailPagePro
             </div>
             <div>
               <label className="text-sm font-medium text-slate-500">Total Customers</label>
-              <p className="text-slate-900">{customers.length}</p>
+              <p className="text-slate-900">
+                {release.status === 'active' ? existingCustomerIds.length : allCustomers.length}
+                {release.status === 'active' && allCustomers.length > existingCustomerIds.length && (
+                  <span className="text-slate-400 text-sm ml-1">
+                    ({allCustomers.length - existingCustomerIds.length} not in release)
+                  </span>
+                )}
+              </p>
             </div>
             {release.status === 'active' && (
               <div>
@@ -173,7 +167,6 @@ export default async function ReleaseDetailPage({ params }: ReleaseDetailPagePro
                 <h3 className="font-medium mb-3">Deploy Steps ({release.templates.filter(t => t.category === 'deploy').length})</h3>
                 <Link href={`/releases/${releaseId}/steps`}>
                   <Button variant="outline" size="sm">
-                    <Plus className="w-4 h-4 mr-2" />
                     Manage Deploy Steps
                   </Button>
                 </Link>
@@ -182,7 +175,6 @@ export default async function ReleaseDetailPage({ params }: ReleaseDetailPagePro
                 <h3 className="font-medium mb-3">Verify Steps ({release.templates.filter(t => t.category === 'verify').length})</h3>
                 <Link href={`/releases/${releaseId}/steps`}>
                   <Button variant="outline" size="sm">
-                    <Plus className="w-4 h-4 mr-2" />
                     Manage Verify Steps
                   </Button>
                 </Link>

@@ -9,7 +9,7 @@ import {
   type ReleaseType,
   type ReleaseStatus,
 } from '@/lib/db/schema';
-import { eq, and, desc } from 'drizzle-orm';
+import { eq, and, desc, inArray } from 'drizzle-orm';
 import { revalidatePath } from 'next/cache';
 
 export type ReleaseInput = {
@@ -41,7 +41,7 @@ export async function updateRelease(id: number, data: Partial<ReleaseInput>) {
   return release;
 }
 
-export async function activateRelease(id: number) {
+export async function activateRelease(id: number, customerIds?: number[]) {
   const release = await db.query.releases.findFirst({
     where: eq(releases.id, id),
     with: { templates: true },
@@ -50,12 +50,20 @@ export async function activateRelease(id: number) {
   if (!release) throw new Error('Release not found');
   if (release.status !== 'draft') throw new Error('Release is not in draft status');
   
-  const activeCustomers = await db.query.customers.findMany({
-    where: eq(customers.isActive, true),
-  });
+  // If customerIds not provided, use all active customers (backward compatible)
+  const targetCustomers = customerIds 
+    ? await db.query.customers.findMany({
+        where: and(
+          eq(customers.isActive, true),
+          inArray(customers.id, customerIds)
+        ),
+      })
+    : await db.query.customers.findMany({
+        where: eq(customers.isActive, true),
+      });
   
   // Create customer steps from templates
-  const customerStepsToInsert = activeCustomers.flatMap(customer => 
+  const customerStepsToInsert = targetCustomers.flatMap(customer => 
     release.templates.map(template => ({
       releaseId: id,
       customerId: customer.id,
@@ -81,6 +89,61 @@ export async function activateRelease(id: number) {
   
   revalidatePath('/releases');
   revalidatePath(`/releases/${id}`);
+}
+
+export async function addCustomersToRelease(releaseId: number, customerIds: number[]) {
+  const release = await db.query.releases.findFirst({
+    where: eq(releases.id, releaseId),
+    with: { templates: true },
+  });
+  
+  if (!release) throw new Error('Release not found');
+  if (release.status !== 'active') throw new Error('Release must be active to add customers');
+  
+  // Get existing customer IDs in this release
+  const existingSteps = await db.query.customerSteps.findMany({
+    where: eq(customerSteps.releaseId, releaseId),
+    columns: { customerId: true },
+  });
+  const existingCustomerIds = new Set(existingSteps.map((s: { customerId: number }) => s.customerId));
+  
+  // Filter out customers already in the release
+  const newCustomerIds = customerIds.filter(id => !existingCustomerIds.has(id));
+  
+  if (newCustomerIds.length === 0) {
+    throw new Error('All selected customers are already in this release');
+  }
+  
+  // Get the new customers
+  const newCustomers = await db.query.customers.findMany({
+    where: and(
+      eq(customers.isActive, true),
+      inArray(customers.id, newCustomerIds)
+    ),
+  });
+  
+  // Create customer steps from current templates
+  const customerStepsToInsert = newCustomers.flatMap(customer => 
+    release.templates.map(template => ({
+      releaseId: releaseId,
+      customerId: customer.id,
+      templateId: template.id,
+      name: template.name,
+      category: template.category,
+      type: template.type,
+      content: template.content,
+      orderIndex: template.orderIndex,
+      status: 'pending' as const,
+      isCustom: false,
+      isOverridden: false,
+    }))
+  );
+  
+  if (customerStepsToInsert.length > 0) {
+    await db.insert(customerSteps).values(customerStepsToInsert);
+  }
+  
+  revalidatePath(`/releases/${releaseId}`);
 }
 
 export async function archiveRelease(id: number) {

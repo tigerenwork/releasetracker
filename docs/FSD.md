@@ -191,11 +191,12 @@ Customer-specific step instance (actual execution unit).
 |----|---------|-------------|
 | FR-001 | Create Release | Create with type, name, description, version/date for release type |
 | FR-002 | Release Lifecycle | Draft → Active → Archived workflow |
-| FR-003 | Activate Release | Copies template steps to all active customers |
+| FR-003 | Activate Release | Copies template steps to selected customers (defaults to all, with option to exclude) |
 | FR-004 | Clone Release | Use existing release as template for new one |
 | FR-005 | Archive Release | Archive completed/abandoned releases |
 | FR-006 | View Release Dashboard | See progress across all customers and clusters |
 | FR-007 | Filter Dashboard | Filter by cluster to focus on specific infrastructure |
+| FR-008 | Incremental Customer Add | Add customers to an active release after initial activation |
 
 ### 4.4 Step Management (Template Layer)
 
@@ -489,6 +490,62 @@ The side panel opens when clicking a step cell in the matrix view, showing custo
 └─────────────────────────────────────────────────────────────────┘
 ```
 
+### 5.9 Activate Release - Customer Selection Dialog
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│  Activate Release: v2.5.0                             [X]       │
+├─────────────────────────────────────────────────────────────────┤
+│  Select customers to include in this release:                   │
+│                                                                  │
+│  [Search customers...]                            [Select All]  │
+│                                                                  │
+│  ─────────────────────────────────────────────────────────────  │
+│  📁 prod-us (3 customers)                                        │
+│  ─────────────────────────────────────────────────────────────  │
+│  ☑️ customer-a      namespace: cust-a-prod                      │
+│  ☑️ customer-b      namespace: cust-b-prod                      │
+│  ☐ customer-c      namespace: cust-c-prod   [excluded]          │
+│                                                                  │
+│  ─────────────────────────────────────────────────────────────  │
+│  📁 prod-eu (2 customers)                                        │
+│  ─────────────────────────────────────────────────────────────  │
+│  ☑️ customer-d      namespace: cust-d-prod                      │
+│  ☑️ customer-e      namespace: cust-e-prod                      │
+│                                                                  │
+│  Selected: 4 of 5 customers                                      │
+│                                                                  │
+│              [Cancel]  [Activate]                               │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+### 5.10 Release Matrix - Add Customer Button
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│  Release: v2.5.0 (Regular Release)                              │
+│  Type: release | Status: Active | Date: 2024-01-15              │
+│  [Deploy Tab] [Verify Tab]                          [Settings] │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                  │
+│  Filter: [All Clusters ▼] [All Status ▼]  [+ Add Customer]     │
+│                                                                  │
+│  ─────────────────────────────────────────────────────────────  │
+│  📁 prod-us                                                      │
+│  ─────────────────────────────────────────────────────────────  │
+│  ┌──────────┬─────────────────┬─────────────────┬────────────┐  │
+│  │ Step     │ customer-a      │ customer-b      │ customer-c │  │
+│  │          │ (cust-a-prod)   │ (cust-b-prod)   │ (ADD ➕)   │  │
+│  ├──────────┼─────────────────┼─────────────────┼────────────┤  │
+│  │ 1. Deploy│ ✅ Done         │ ✅ Done         │            │  │
+│  │ 2. SQL   │ ✅ Done         │ ⚠️ Overridden   │            │  │
+│  └──────────┴─────────────────┴─────────────────┴────────────┘  │
+│                                                                  │
+│  Legend: ✅ Done | 🔄 Pending | ⏸️ Skipped | ⚠️ Custom/Overridden │
+│           ➕ Click to add customer to release                    │
+└─────────────────────────────────────────────────────────────────┘
+```
+
 ---
 
 ## 6. Business Rules
@@ -504,10 +561,13 @@ The side panel opens when clicking a step cell in the matrix view, showing custo
 - **BR-M03**: Soft delete only; maintain history for audit
 
 ### 6.3 Release Rules
-- **BR-R01**: When release is activated, steps are created for ALL active customers across ALL clusters
+- **BR-R01**: When release is activated, steps are created for SELECTED active customers (default: all, with ability to exclude)
 - **BR-R02**: Editing template step only affects customers where step is `pending`
 - **BR-R03**: Once step is marked `done`, content is locked (prevent accidental changes)
 - **BR-R04**: Reverting a step sets status to `reverted` but preserves history
+- **BR-R05**: Additional customers can be added to an active release (incremental add)
+- **BR-R06**: Only customers not already in the release can be added incrementally
+- **BR-R07**: Incrementally added customers receive the current template steps (including any edits made after initial activation)
 
 ### 6.4 Step Rules
 - **BR-S01**: Custom steps (is_custom=true) don't affect other customers or template (unless "Add to template" is checked)
@@ -582,6 +642,47 @@ The side panel opens when clicking a step cell in the matrix view, showing custo
 3. Activate and deploy
 
 4. Verify and archive
+```
+
+### 7.4 Selective Activation & Incremental Add
+
+**Scenario 1: Staged Release Deployment**
+```
+1. Create "release" type Release
+   └─→ Add deploy and verify steps
+
+2. Activate with Customer Selection
+   └─→ Dialog shows all customers (grouped by cluster)
+   └─→ All customers pre-selected by default
+   └─→ Uncheck customers to exclude (e.g., pilot group only)
+   └─→ Click Activate
+
+3. Monitor pilot group progress
+
+4. Add remaining customers incrementally
+   └─→ Go to Release Matrix view
+   └─→ Click "Add Customer" button
+   └─→ Select customers to add
+   └─→ New customers receive current template steps
+
+5. Continue until all customers complete
+```
+
+**Scenario 2: New Customer with Updated Onboarding**
+```
+1. Original onboarding release (v1) applied to all existing customers
+
+2. System evolves, onboarding template changes
+
+3. Clone v1 → Create onboarding v2 with updated steps
+
+4. New customer joins
+
+5. Activate onboarding v2
+   └─→ Exclude all existing customers (they have v1)
+   └─→ Include only the new customer
+
+6. New customer completes onboarding v2
 ```
 
 ---

@@ -485,7 +485,10 @@ export async function updateRelease(
   return release;
 }
 
-export async function activateRelease(id: number): Promise<void> {
+export async function activateRelease(
+  id: number, 
+  customerIds?: number[]
+): Promise<void> {
   const release = await db.query.releases.findFirst({
     where: eq(releases.id, id),
     with: { templates: true },
@@ -494,12 +497,20 @@ export async function activateRelease(id: number): Promise<void> {
   if (!release) throw new Error('Release not found');
   if (release.status !== 'draft') throw new Error('Release is not in draft status');
   
-  const activeCustomers = await db.query.customers.findMany({
-    where: eq(customers.isActive, true),
-  });
+  // If customerIds not provided, use all active customers (backward compatible)
+  const targetCustomers = customerIds 
+    ? await db.query.customers.findMany({
+        where: and(
+          eq(customers.isActive, true),
+          inArray(customers.id, customerIds)
+        ),
+      })
+    : await db.query.customers.findMany({
+        where: eq(customers.isActive, true),
+      });
   
   // Create customer steps from templates
-  const customerStepsToInsert = activeCustomers.flatMap(customer => 
+  const customerStepsToInsert = targetCustomers.flatMap(customer => 
     release.templates.map(template => ({
       releaseId: id,
       customerId: customer.id,
@@ -525,6 +536,64 @@ export async function activateRelease(id: number): Promise<void> {
   
   revalidatePath('/releases');
   revalidatePath(`/releases/${id}`);
+}
+
+export async function addCustomersToRelease(
+  releaseId: number,
+  customerIds: number[]
+): Promise<void> {
+  const release = await db.query.releases.findFirst({
+    where: eq(releases.id, releaseId),
+    with: { templates: true },
+  });
+  
+  if (!release) throw new Error('Release not found');
+  if (release.status !== 'active') throw new Error('Release must be active to add customers');
+  
+  // Get existing customer IDs in this release
+  const existingSteps = await db.query.customerSteps.findMany({
+    where: eq(customerSteps.releaseId, releaseId),
+    columns: { customerId: true },
+  });
+  const existingCustomerIds = new Set(existingSteps.map(s => s.customerId));
+  
+  // Filter out customers already in the release
+  const newCustomerIds = customerIds.filter(id => !existingCustomerIds.has(id));
+  
+  if (newCustomerIds.length === 0) {
+    throw new Error('All selected customers are already in this release');
+  }
+  
+  // Get the new customers
+  const newCustomers = await db.query.customers.findMany({
+    where: and(
+      eq(customers.isActive, true),
+      inArray(customers.id, newCustomerIds)
+    ),
+  });
+  
+  // Create customer steps from current templates
+  const customerStepsToInsert = newCustomers.flatMap(customer => 
+    release.templates.map(template => ({
+      releaseId: releaseId,
+      customerId: customer.id,
+      templateId: template.id,
+      name: template.name,
+      category: template.category,
+      type: template.type,
+      content: template.content,
+      orderIndex: template.orderIndex,
+      status: 'pending' as const,
+      isCustom: false,
+      isOverridden: false,
+    }))
+  );
+  
+  if (customerStepsToInsert.length > 0) {
+    await db.insert(customerSteps).values(customerStepsToInsert);
+  }
+  
+  revalidatePath(`/releases/${releaseId}`);
 }
 
 export async function archiveRelease(id: number): Promise<void> {
@@ -1110,9 +1179,78 @@ export function CodeBlock({ code, type, showLineNumbers = true }: CodeBlockProps
 }
 ```
 
+### 6.7 Activate Release Dialog (NEW)
+
+```typescript
+// components/releases/activate-release-dialog.tsx
+
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Checkbox } from '@/components/ui/checkbox';
+import { useState } from 'react';
+
+interface CustomerWithCluster {
+  id: number;
+  name: string;
+  namespace: string;
+  cluster: {
+    id: number;
+    name: string;
+  };
+}
+
+interface ActivateReleaseDialogProps {
+  releaseId: number;
+  releaseName: string;
+  customers: CustomerWithCluster[];
+  isOpen: boolean;
+  onClose: () => void;
+  onActivate: (customerIds: number[]) => Promise<void>;
+}
+
+export function ActivateReleaseDialog({ 
+  releaseId, 
+  releaseName,
+  customers,
+  isOpen, 
+  onClose,
+  onActivate 
+}: ActivateReleaseDialogProps) {
+  // Dialog for selecting customers before activation
+  // Groups customers by cluster
+  // Select All / Deselect All buttons
+  // Shows count: "Selected X of Y customers"
+  // Activate button (disabled if no customers selected)
+  // Cancel button
+}
+```
+
+### 6.8 Add Customer to Release Dialog (NEW)
+
+```typescript
+// components/releases/add-customer-dialog.tsx
+
+interface AddCustomerDialogProps {
+  releaseId: number;
+  releaseName: string;
+  // Customers not currently in the release
+  availableCustomers: CustomerWithCluster[];
+  isOpen: boolean;
+  onClose: () => void;
+  onAdd: (customerIds: number[]) => Promise<void>;
+}
+
+export function AddCustomerDialog({ ...props }: AddCustomerDialogProps) {
+  // Dialog for adding customers to an active release
+  // Shows only customers NOT already in the release
+  // Multi-select with checkboxes
+  // Grouped by cluster
+  // Add button (disabled if none selected)
+}
+```
+
 ---
 
-## 6.7 API Endpoints (NEW)
+## 6.9 API Endpoints
 
 ### Reorder Steps Endpoint
 
@@ -1144,6 +1282,26 @@ export async function GET(
   const stepId = parseInt(params.id);
   const step = await getStepWithDetails(stepId);
   return Response.json(step);
+}
+```
+
+### Add Customers to Release Endpoint
+
+```typescript
+// app/api/releases/[id]/add-customers/route.ts
+
+import { NextRequest } from 'next/server';
+import { addCustomersToRelease } from '@/lib/actions/releases';
+
+export async function POST(
+  request: NextRequest,
+  { params }: { params: { id: string } }
+) {
+  const releaseId = parseInt(params.id);
+  const { customerIds } = await request.json();
+  
+  await addCustomersToRelease(releaseId, customerIds);
+  return Response.json({ success: true });
 }
 ```
 
