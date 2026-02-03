@@ -79,7 +79,7 @@ export default async function ReleaseDetailPage({ params }: ReleaseDetailPagePro
           </Link>
           <div>
             <div className="flex items-center gap-3">
-              <h1 className="text-3xl font-bold text-slate-900">{release.name}</h1>
+              <h1 className="text-3xl font-bold text-slate-900">{release.name || 'Untitled Release'}</h1>
               <Badge className={getTypeColor(release.type || '')}>{release.type}</Badge>
               <Badge className={getStatusColor(release.status || '')}>{release.status}</Badge>
             </div>
@@ -97,8 +97,8 @@ export default async function ReleaseDetailPage({ params }: ReleaseDetailPagePro
           </Link>
           <ReleaseActions
             releaseId={releaseId}
-            releaseName={release.name}
-            releaseStatus={release.status}
+            releaseName={release.name || 'Untitled Release'}
+            releaseStatus={release.status || 'draft'}
             allCustomers={allCustomers}
             existingCustomerIds={existingCustomerIds}
           />
