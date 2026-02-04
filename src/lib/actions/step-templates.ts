@@ -82,6 +82,23 @@ export async function reorderSteps(
   category: StepCategory,
   orderedIds: number[]
 ) {
+  // Two-phase update to avoid unique constraint violations
+  // Phase 1: Move all steps to temporary high values (offset by 10000)
+  for (let i = 0; i < orderedIds.length; i++) {
+    await db.update(stepTemplates)
+      .set({ orderIndex: i + 10000 })
+      .where(eq(stepTemplates.id, orderedIds[i]));
+    
+    // Also update customer steps
+    await db.update(customerSteps)
+      .set({ orderIndex: i + 10000 })
+      .where(and(
+        eq(customerSteps.templateId, orderedIds[i]),
+        eq(customerSteps.category, category)
+      ));
+  }
+  
+  // Phase 2: Move to final positions
   for (let i = 0; i < orderedIds.length; i++) {
     await db.update(stepTemplates)
       .set({ orderIndex: i })
@@ -95,6 +112,7 @@ export async function reorderSteps(
         eq(customerSteps.category, category)
       ));
   }
+  
   revalidatePath(`/releases/${releaseId}/steps`);
 }
 
