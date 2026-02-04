@@ -6,13 +6,11 @@ import { Button } from '@/components/ui/button';
 
 interface CodeBlockProps {
   code: string;
-  type: 'bash' | 'sql' | 'text';
+  type: 'bash' | 'sql' | 'text' | 'branch';
   showLineNumbers?: boolean;
 }
 
 export function CodeBlock({ code, type, showLineNumbers = true }: CodeBlockProps) {
-  console.log('[CodeBlock] Render - code length:', code?.length, 'code preview:', code?.substring(0, 50), 'type:', type);
-  
   const [copied, setCopied] = useState(false);
 
   // Compute highlighted code synchronously
@@ -30,16 +28,13 @@ export function CodeBlock({ code, type, showLineNumbers = true }: CodeBlockProps
         require('prismjs/components/prism-bash');
       }
 
-      const language = type === 'text' ? 'text' : type;
+      const language = type === 'text' || type === 'branch' ? 'text' : type;
       const grammar = Prism.languages[language] || Prism.languages.text;
       return Prism.highlight(code, grammar, language);
     } catch (e) {
-      console.error('[CodeBlock] Prism error:', e);
       return code.replace(/</g, '&lt;').replace(/>/g, '&gt;');
     }
   }, [code, type]);
-
-  console.log('[CodeBlock] highlighted length:', highlighted?.length);
 
   const handleCopy = async () => {
     await navigator.clipboard.writeText(code);
@@ -52,48 +47,37 @@ export function CodeBlock({ code, type, showLineNumbers = true }: CodeBlockProps
   const highlightedLines = highlighted ? highlighted.split('\n') : [];
 
   return (
-    <div className="relative group">
-      <Button
-        variant="ghost"
-        size="sm"
-        className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity z-10"
-        onClick={handleCopy}
-      >
-        {copied ? (
-          <Check className="w-4 h-4 text-green-500" />
-        ) : (
-          <Copy className="w-4 h-4" />
-        )}
-      </Button>
-      <div className="rounded-lg bg-slate-900 p-4 overflow-x-auto text-sm">
-        <pre className={`language-${type} m-0`}>
-          {showLineNumbers ? (
-            <div className="flex">
-              {/* Line numbers column */}
-              <div className="flex flex-col text-slate-500 text-right pr-4 select-none min-w-[3rem]">
-                {lines.map((_: string, i: number) => (
-                  <span key={i}>{i + 1}</span>
-                ))}
-              </div>
-              {/* Code column */}
-              <div className="flex flex-col">
-                {highlightedLines.map((line: string, i: number) => (
-                  <span 
-                    key={i} 
-                    className="text-slate-100 whitespace-pre"
-                    dangerouslySetInnerHTML={{ __html: line || ' ' }}
-                  />
-                ))}
-              </div>
+    <div 
+      className="rounded-lg bg-slate-900 p-4 text-sm overflow-x-auto"
+      style={{ maxWidth: '100%' }}
+    >
+      <pre className={`language-${type} m-0`} style={{ minWidth: '100%' }}>
+        {showLineNumbers ? (
+          <div className="flex" style={{ minWidth: 0 }}>
+            {/* Line numbers column - fixed width */}
+            <div className="flex flex-col text-slate-500 text-right pr-4 select-none w-12 shrink-0">
+              {lines.map((_: string, i: number) => (
+                <span key={i}>{i + 1}</span>
+              ))}
             </div>
-          ) : (
-            <code 
-              className="text-slate-100 whitespace-pre"
-              dangerouslySetInnerHTML={{ __html: highlighted || code || '' }}
-            />
-          )}
-        </pre>
-      </div>
+            {/* Code column */}
+            <div className="flex flex-col" style={{ minWidth: 0 }}>
+              {highlightedLines.map((line: string, i: number) => (
+                <span 
+                  key={i} 
+                  className="text-slate-100 whitespace-pre"
+                  dangerouslySetInnerHTML={{ __html: line || ' ' }}
+                />
+              ))}
+            </div>
+          </div>
+        ) : (
+          <code 
+            className="text-slate-100 whitespace-pre"
+            dangerouslySetInnerHTML={{ __html: highlighted || code || '' }}
+          />
+        )}
+      </pre>
     </div>
   );
 }

@@ -73,13 +73,7 @@ export function StepDetailPanel({
 
   // Sync state when step changes
   useEffect(() => {
-    console.log('[StepDetailPanel] useEffect triggered, step?.id:', step?.id);
     if (step) {
-      console.log('[StepDetailPanel] Syncing state with step:', {
-        stepId: step.id,
-        stepName: step.name,
-        stepContent: step.content?.substring(0, 50),
-      });
       setNotes(step.notes || '');
       setEditContent(step.content || '');
       setIsEditing(false);
@@ -88,8 +82,6 @@ export function StepDetailPanel({
       setIsSkipping(false);
     }
   }, [step?.id]);
-
-  console.log('[StepDetailPanel] Render - step:', step?.id, 'step.content:', step?.content?.substring(0, 50), 'editContent:', editContent?.substring(0, 50));
 
   if (!step) return null;
 
@@ -189,7 +181,7 @@ export function StepDetailPanel({
 
   return (
     <Sheet open={isOpen} onOpenChange={onClose}>
-      <SheetContent key={step?.id} className="w-[600px] sm:max-w-[600px]">
+      <SheetContent key={step?.id} className="w-[600px] sm:max-w-[600px] overflow-hidden">
         <SheetHeader className="px-6">
           <div className="flex items-start justify-between">
             <div>
@@ -205,8 +197,9 @@ export function StepDetailPanel({
           </div>
         </SheetHeader>
 
-        <ScrollArea className="h-[calc(100vh-180px)] mt-6 px-6">
-          <div className="space-y-6">
+        <div style={{ width: '552px', maxWidth: '552px' }}>
+          <ScrollArea className="h-[calc(100vh-180px)] mt-6 px-6 w-full">
+            <div className="space-y-6" style={{ width: '504px', maxWidth: '504px' }}>
             {/* Status & Type */}
             <div className="flex items-center gap-4">
               <div className="flex items-center gap-2">
@@ -226,7 +219,7 @@ export function StepDetailPanel({
             </div>
 
             {/* Content */}
-            <div>
+            <div className="min-w-0" style={{ maxWidth: '100%' }}>
               <div className="flex items-center justify-between mb-2">
                 <label className="text-sm font-medium text-slate-500">Content</label>
                 {!isEditing && (
@@ -263,7 +256,9 @@ export function StepDetailPanel({
                   </div>
                 </div>
               ) : (
-                <CodeBlock code={step.content} type={step.type} />
+                <div className="overflow-hidden" style={{ maxWidth: '100%', width: '100%' }}>
+                  <CodeBlock code={step.content} type={step.type} />
+                </div>
               )}
 
               {/* Show original content if overridden */}
@@ -375,7 +370,8 @@ export function StepDetailPanel({
               </>
             )}
           </div>
-        </ScrollArea>
+          </ScrollArea>
+        </div>
       </SheetContent>
     </Sheet>
   );
