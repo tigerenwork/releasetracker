@@ -17,6 +17,42 @@ import {
   DialogTrigger,
 } from '@/components/ui/dialog';
 
+// Copy button with subtle feedback
+function CopyButton({ text }: { text: string }) {
+  const [copied, setCopied] = useState(false);
+
+  const handleCopy = async () => {
+    await navigator.clipboard.writeText(text);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 1500);
+  };
+
+  return (
+    <Button
+      variant="ghost"
+      size="sm"
+      onClick={handleCopy}
+      className={`h-7 px-2 transition-colors duration-200 ${
+        copied 
+          ? 'text-green-600 bg-green-50 hover:bg-green-100 hover:text-green-700' 
+          : 'text-slate-500 hover:text-slate-700'
+      }`}
+    >
+      {copied ? (
+        <>
+          <Check className="w-3.5 h-3.5 mr-1" />
+          Copied
+        </>
+      ) : (
+        <>
+          <Copy className="w-3.5 h-3.5 mr-1" />
+          Copy
+        </>
+      )}
+    </Button>
+  );
+}
+
 interface StepDetailPanelProps {
   step: any;
   template: any;
@@ -223,15 +259,7 @@ export function StepDetailPanel({
               <div className="flex items-center justify-between mb-2">
                 <label className="text-sm font-medium text-slate-500">Content</label>
                 {!isEditing && (
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => navigator.clipboard.writeText(step.content)}
-                    className="h-7 px-2 text-slate-500 hover:text-slate-700"
-                  >
-                    <Copy className="w-3.5 h-3.5 mr-1" />
-                    Copy
-                  </Button>
+                  <CopyButton text={step.content} />
                 )}
               </div>
               
