@@ -181,7 +181,7 @@ export function StepDetailPanel({
 
   return (
     <Sheet open={isOpen} onOpenChange={onClose}>
-      <SheetContent key={step?.id} className="w-[600px] sm:max-w-[600px] overflow-hidden">
+      <SheetContent key={step?.id} className="w-[800px] sm:max-w-[800px] overflow-hidden">
         <SheetHeader className="px-6">
           <div className="flex items-start justify-between">
             <div>
@@ -197,9 +197,9 @@ export function StepDetailPanel({
           </div>
         </SheetHeader>
 
-        <div style={{ width: '552px', maxWidth: '552px' }}>
+        <div style={{ width: '752px', maxWidth: '752px' }}>
           <ScrollArea className="h-[calc(100vh-180px)] mt-6 px-6 w-full">
-            <div className="space-y-6" style={{ width: '504px', maxWidth: '504px' }}>
+            <div className="space-y-6" style={{ width: '704px', maxWidth: '704px' }}>
             {/* Status & Type */}
             <div className="flex items-center gap-4">
               <div className="flex items-center gap-2">
