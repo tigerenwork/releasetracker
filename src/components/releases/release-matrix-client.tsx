@@ -45,8 +45,9 @@ export function ReleaseMatrixClient({ stepsByCluster, category, releaseId }: Rel
   const handleActionComplete = () => {
     setRefreshKey(prev => prev + 1);
     setIsPanelOpen(false);
-    // Refresh the page to get updated data
-    window.location.reload();
+    // Refresh the page to get updated data, preserving the current tab
+    const currentUrl = new URL(window.location.href);
+    window.location.href = currentUrl.toString();
   };
 
   // Server actions wrapped in async functions

@@ -16,6 +16,9 @@ interface ReleaseDetailPageProps {
   params: Promise<{
     id: string;
   }>;
+  searchParams: Promise<{
+    tab?: string;
+  }>;
 }
 
 const typeColors: Record<string, string> = {
@@ -40,10 +43,12 @@ function getStatusColor(status: string) {
 
 export const dynamic = 'force-dynamic';
 
-export default async function ReleaseDetailPage({ params }: ReleaseDetailPageProps) {
+export default async function ReleaseDetailPage({ params, searchParams }: ReleaseDetailPageProps) {
   const { id } = await params;
+  const { tab } = await searchParams;
   const releaseId = parseInt(id);
   const release = await getReleaseById(releaseId);
+  const activeTab = tab === 'verify' ? 'verify' : 'deploy';
 
   if (!release) {
     notFound();
@@ -186,13 +191,17 @@ export default async function ReleaseDetailPage({ params }: ReleaseDetailPagePro
 
       {/* Matrix View (for active) */}
       {release.status === 'active' && (
-        <Tabs defaultValue="deploy">
+        <Tabs defaultValue={activeTab}>
           <TabsList>
-            <TabsTrigger value="deploy">
-              Deploy ({stats.done + stats.skipped}/{stats.total})
+            <TabsTrigger value="deploy" asChild>
+              <Link href={`/releases/${releaseId}?tab=deploy`}>
+                Deploy ({stats.done + stats.skipped}/{stats.total})
+              </Link>
             </TabsTrigger>
-            <TabsTrigger value="verify">
-              Verify 
+            <TabsTrigger value="verify" asChild>
+              <Link href={`/releases/${releaseId}?tab=verify`}>
+                Verify 
+              </Link>
             </TabsTrigger>
           </TabsList>
 
