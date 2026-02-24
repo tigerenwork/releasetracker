@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { useState } from 'react';
-import { Package, Play, Archive, Copy, Edit, ChevronDown, ChevronUp, ArrowUpDown } from 'lucide-react';
+import { Package, Play, Archive, Copy, Edit, Trash2, ChevronDown, ChevronUp, ArrowUpDown } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import {
@@ -19,6 +19,17 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from '@/components/ui/alert-dialog';
 import type { Release } from '@/lib/db/schema';
 
 interface ReleaseListProps {
@@ -125,6 +136,16 @@ export function ReleaseList({ releases, showActions = true }: ReleaseListProps) 
       window.location.reload();
     } catch (error) {
       alert(error instanceof Error ? error.message : 'Failed to clone release');
+    }
+  }
+
+  async function handleDelete(id: number, name: string) {
+    try {
+      const { deleteRelease } = await import('@/lib/actions/releases');
+      await deleteRelease(id);
+      window.location.reload();
+    } catch (error) {
+      alert(error instanceof Error ? error.message : 'Failed to delete release');
     }
   }
 
@@ -267,6 +288,31 @@ export function ReleaseList({ releases, showActions = true }: ReleaseListProps) 
                             Edit
                           </Link>
                         </DropdownMenuItem>
+                      )}
+                      {release.status === 'draft' && (
+                        <AlertDialog>
+                          <AlertDialogTrigger asChild>
+                            <DropdownMenuItem onSelect={(e) => e.preventDefault()} className="text-red-600">
+                              <Trash2 className="w-4 h-4 mr-2" />
+                              Delete
+                            </DropdownMenuItem>
+                          </AlertDialogTrigger>
+                          <AlertDialogContent>
+                            <AlertDialogHeader>
+                              <AlertDialogTitle>Delete Release</AlertDialogTitle>
+                              <AlertDialogDescription>
+                                Are you sure you want to delete the release &quot;{release.name}&quot;?
+                                This action cannot be undone.
+                              </AlertDialogDescription>
+                            </AlertDialogHeader>
+                            <AlertDialogFooter>
+                              <AlertDialogCancel>Cancel</AlertDialogCancel>
+                              <AlertDialogAction onClick={() => handleDelete(release.id, release.name)} className="bg-red-600 hover:bg-red-700">
+                                Delete
+                              </AlertDialogAction>
+                            </AlertDialogFooter>
+                          </AlertDialogContent>
+                        </AlertDialog>
                       )}
                     </DropdownMenuContent>
                   </DropdownMenu>
