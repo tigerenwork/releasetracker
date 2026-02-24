@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { useState } from 'react';
-import { Package, Play, Archive, Copy, Edit, Trash2, ChevronDown, ChevronUp, ArrowUpDown } from 'lucide-react';
+import { Package, Play, Archive, Copy, Edit, ChevronDown, ChevronUp, ArrowUpDown } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import {
@@ -260,12 +260,14 @@ export function ReleaseList({ releases, showActions = true }: ReleaseListProps) 
                           Archive
                         </DropdownMenuItem>
                       )}
-                      <DropdownMenuItem asChild>
-                        <Link href={`/releases/${release.id}/edit`} className="flex items-center">
-                          <Edit className="w-4 h-4 mr-2" />
-                          Edit
-                        </Link>
-                      </DropdownMenuItem>
+                      {release.status !== 'archived' && (
+                        <DropdownMenuItem asChild>
+                          <Link href={`/releases/${release.id}/edit`} className="flex items-center">
+                            <Edit className="w-4 h-4 mr-2" />
+                            Edit
+                          </Link>
+                        </DropdownMenuItem>
+                      )}
                     </DropdownMenuContent>
                   </DropdownMenu>
                 </TableCell>

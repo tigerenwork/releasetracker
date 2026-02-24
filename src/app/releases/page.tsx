@@ -54,7 +54,7 @@ export default async function ReleasesPage() {
         </TabsContent>
 
         <TabsContent value="archived" className="mt-6">
-          <ReleaseList releases={archived} showActions={false} />
+          <ReleaseList releases={archived} />
         </TabsContent>
       </Tabs>
     </div>

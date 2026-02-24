@@ -133,12 +133,14 @@ export function ReleaseCard({ release, showActions = true }: ReleaseCardProps) {
                       Archive
                     </DropdownMenuItem>
                   )}
-                  <DropdownMenuItem onClick={() => {}}>
-                    <Link href={`/releases/${release.id}/edit`} className="flex items-center">
-                      <Edit className="w-4 h-4 mr-2" />
-                      Edit
-                    </Link>
-                  </DropdownMenuItem>
+                  {release.status !== 'archived' && (
+                    <DropdownMenuItem onClick={() => {}}>
+                      <Link href={`/releases/${release.id}/edit`} className="flex items-center">
+                        <Edit className="w-4 h-4 mr-2" />
+                        Edit
+                      </Link>
+                    </DropdownMenuItem>
+                  )}
                   {release.status === 'draft' && (
                     <AlertDialog>
                       <AlertDialogTrigger asChild>
