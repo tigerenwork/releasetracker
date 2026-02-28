@@ -1,0 +1,50 @@
+{
+  "manifest_version": 3,
+  "name": "Release Tracker Agent Bridge",
+  "version": "1.0.0",
+  "description": "Bridge between Release Tracker web app and local execution agent",
+  "permissions": [
+    "storage",
+    "activeTab"
+  ],
+  "host_permissions": [
+    "http://localhost:3456/*",
+    "http://127.0.0.1:3456/*",
+    "https://*/*",
+    "http://*/*"
+  ],
+  "content_scripts": [
+    {
+      "matches": [
+        "http://localhost:*/*",
+        "http://127.0.0.1:*/*",
+        "https://*/*",
+        "http://*/*"
+      ],
+      "js": ["injected.js"],
+      "run_at": "document_start",
+      "all_frames": false,
+      "world": "MAIN"
+    },
+    {
+      "matches": [
+        "http://localhost:*/*",
+        "http://127.0.0.1:*/*",
+        "https://*/*",
+        "http://*/*"
+      ],
+      "js": ["content.js"],
+      "run_at": "document_start",
+      "all_frames": false,
+      "world": "ISOLATED"
+    }
+  ],
+  "background": {
+    "service_worker": "background.js",
+    "type": "module"
+  },
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "Release Tracker Agent"
+  }
+}

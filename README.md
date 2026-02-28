@@ -95,20 +95,70 @@ See [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) for detailed instructions.
 2. Click on individual steps to mark them as done or skipped
 3. Override step content for specific customers if needed
 
+## Agent Bridge POC (Proof of Concept)
+
+This project includes a proof-of-concept for executing commands via a browser extension bridge to a local agent.
+
+**Architecture:** Web App → Browser Extension → Local Agent
+
+### Quick Start (POC)
+
+1. **Start the Local Agent:**
+   ```bash
+   cd agent
+   node server.js
+   ```
+
+2. **Load the Browser Extension:**
+   - Open Chrome → `chrome://extensions/`
+   - Enable "Developer mode"
+   - Click "Load unpacked"
+   - Select the `extension/` folder
+   - Configure token: `poc-token-123` (matches agent default)
+
+3. **Test the Connection:**
+   - Open the web app at `http://localhost:3000`
+   - Navigate to `/agent-test`
+   - Click "Ping Agent" to verify the chain works
+
+See [docs/POC-AGENT-BRIDGE.md](docs/POC-AGENT-BRIDGE.md) for detailed documentation.
+
 ## Project Structure
 
 ```
 my-app/
+├── agent/                # Local execution agent (Node.js)
+│   ├── server.js         # Agent HTTP server
+│   └── package.json
+├── extension/            # Browser extension (Chrome)
+│   ├── manifest.json     # Extension manifest
+│   ├── injected.js       # Page API (window.rtAgent)
+│   ├── content.js        # Content script bridge
+│   ├── background.js     # Service worker
+│   ├── popup.html/js     # Extension popup UI
+│   └── icons/            # Extension icons
 ├── src/
 │   ├── app/              # Next.js pages
+│   │   └── agent-test/   # POC test page
 │   ├── components/       # React components
 │   ├── lib/
 │   │   ├── actions/      # Server Actions
 │   │   ├── db/           # Database schema and connection
 │   │   └── utils/        # Utilities
 ├── data/                 # SQLite database
-└── docs/                 # Documentation (FSD, TSD)
+├── docs/                 # Documentation (FSD, TSD, POC)
+└── README.md
 ```
+
+## Documentation
+
+| Document | Description |
+|----------|-------------|
+| [docs/FSD.md](docs/FSD.md) | Functional Specification |
+| [docs/TSD.md](docs/TSD.md) | Technical Specification |
+| [docs/FSD-AGENT-EXECUTION.md](docs/FSD-AGENT-EXECUTION.md) | Full Agent Execution FSD |
+| [docs/TSD-AGENT-EXECUTION.md](docs/TSD-AGENT-EXECUTION.md) | Full Agent Execution TSD |
+| [docs/POC-AGENT-BRIDGE.md](docs/POC-AGENT-BRIDGE.md) | POC Documentation |
 
 ## Future Enhancements
 

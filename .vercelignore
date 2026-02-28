@@ -1,0 +1,12 @@
+# Exclude POC agent and extension from Vercel deployment
+# These are local development tools, not part of the web app
+
+agent/
+extension/
+
+# Also exclude local data
+data/
+*.db
+
+# Documentation (optional - remove if you want docs on production)
+docs/

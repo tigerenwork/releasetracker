@@ -1,0 +1,12 @@
+{
+  "name": "release-tracker-agent",
+  "version": "1.0.0",
+  "description": "Local execution agent for Release Tracker",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js"
+  },
+  "keywords": ["release-tracker", "agent", "kubectl"],
+  "license": "MIT"
+}
