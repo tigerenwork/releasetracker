@@ -4,142 +4,70 @@ import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import {
+  SQLStepExecutor,
+  RESTStepExecutor,
+  ScriptStepExecutor,
+  TextStepDisplay,
+} from '@/components/executors';
+import { agentBridge, type AgentStatus } from '@/lib/services/agent-bridge';
 
 /**
  * POC Test Page for Agent Bridge
  * 
- * This page tests the communication chain:
- * Web App → Browser Extension → Local Agent
+ * This page tests the communication chain and demonstrates
+ * all execution types: SQL, REST, Script, and Text
  */
-
-interface ExecutionResult {
-  success?: boolean;
-  message?: string;
-  executionId?: string;
-  stdout?: string;
-  exitCode?: number;
-  duration?: number;
-  timestamp?: string;
-  yourData?: any;
-  error?: string;
-}
 
 export default function AgentTestPage() {
   const [extensionAvailable, setExtensionAvailable] = useState<boolean>(false);
-  const [agentStatus, setAgentStatus] = useState<{ connected: boolean; version?: string } | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [result, setResult] = useState<ExecutionResult | null>(null);
-  const [command, setCommand] = useState('hello from web');
+  const [agentStatus, setAgentStatus] = useState<AgentStatus | null>(null);
 
-  // Check extension availability on mount
+  // Check extension availability
   useEffect(() => {
-    // Check immediately
-    checkExtension();
-    
-    // Listen for the custom event from the extension
-    const handleAgentReady = () => {
-      console.log('[Agent Test] Extension ready event received');
-      checkExtension();
-    };
-    
-    window.addEventListener('rt-agent-ready', handleAgentReady);
-    
-    // Re-check frequently at first, then slower
-    const fastInterval = setInterval(checkExtension, 500);
-    const slowInterval = setInterval(checkExtension, 2000);
-    
-    // Stop fast checks after 5 seconds
-    setTimeout(() => clearInterval(fastInterval), 5000);
-    
-    return () => {
-      window.removeEventListener('rt-agent-ready', handleAgentReady);
-      clearInterval(fastInterval);
-      clearInterval(slowInterval);
-    };
-  }, []);
-
-  const checkExtension = () => {
-    if (typeof window === 'undefined') return;
-    
-    // Check for API object or meta tag
-    const hasApi = !!window.rtAgent;
-    const hasMeta = !!document.querySelector('meta[name="rt-extension-ready"]');
-    const available = hasApi || hasMeta;
-    
-    if (available !== extensionAvailable) {
-      console.log('[Agent Test] Extension check - API:', hasApi, 'Meta:', hasMeta);
+    const check = () => {
+      const available = agentBridge?.isAvailable() || false;
       setExtensionAvailable(available);
       
-      // If meta exists but API doesn't, something went wrong
-      if (hasMeta && !hasApi) {
-        console.warn('[Agent Test] Meta tag found but API missing');
+      if (available) {
+        agentBridge?.checkStatus().then(setAgentStatus);
       }
-    }
-    
-    if (available && !agentStatus) {
-      checkAgentStatus();
-    }
+    };
+
+    check();
+    const interval = setInterval(check, 2000);
+    return () => clearInterval(interval);
+  }, []);
+
+  // Sample configurations (these would normally come from customer settings)
+  const sqlConfig = {
+    namespace: 'default',
+    podSelector: 'app=db-client',
+    sqlClient: 'psql' as const,
+    connectionEnvVar: 'DATABASE_URL',
   };
 
-  const checkAgentStatus = async () => {
-    try {
-      const status = await window.rtAgent!.getStatus();
-      setAgentStatus(status);
-    } catch (err) {
-      setAgentStatus({ connected: false });
-    }
+  const restConfig = {
+    namespace: 'default',
+    podSelector: 'app=api-client',
+    baseUrl: 'http://localhost:8080',
   };
 
-  const handlePing = async () => {
-    if (!window.rtAgent) {
-      alert('Extension not available');
-      return;
-    }
-    
-    setLoading(true);
-    try {
-      const response = await window.rtAgent.ping();
-      setResult(response);
-    } catch (err) {
-      setResult({ error: err instanceof Error ? err.message : 'Unknown error' });
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleExecute = async () => {
-    if (!window.rtAgent) {
-      alert('Extension not available');
-      return;
-    }
-    
-    setLoading(true);
-    setResult(null);
-    
-    try {
-      const response = await window.rtAgent.execute({
-        type: 'bash',
-        command: command,
-        context: { test: true, timestamp: Date.now() },
-        timeout: 10000
-      });
-      setResult(response);
-    } catch (err) {
-      setResult({ error: err instanceof Error ? err.message : 'Unknown error' });
-    } finally {
-      setLoading(false);
-    }
+  const scriptConfig = {
+    namespace: 'default',
+    podSelector: 'app=executor',
   };
 
   return (
-    <div className="container mx-auto max-w-2xl py-10">
-      <h1 className="text-3xl font-bold mb-2">Agent Bridge POC</h1>
+    <div className="container mx-auto max-w-4xl py-10">
+      <h1 className="text-3xl font-bold mb-2">Agent Execution System</h1>
       <p className="text-muted-foreground mb-8">
-        Test the communication chain: Web App → Extension → Local Agent
+        Test SQL, REST, Script, and Text step execution via the agent bridge
       </p>
 
       {/* Status Card */}
-      <Card className="mb-6">
+      <Card className="mb-8">
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             Connection Status
@@ -147,108 +75,211 @@ export default function AgentTestPage() {
               {extensionAvailable ? "Extension Detected" : "Extension Not Found"}
             </Badge>
           </CardTitle>
-          <CardDescription>
-            Check if the browser extension is installed and agent is connected
-          </CardDescription>
         </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="flex items-center justify-between p-3 bg-muted rounded">
-            <span className="font-medium">Extension</span>
-            <span className={extensionAvailable ? "text-green-600" : "text-red-600"}>
-              {extensionAvailable ? "✅ Installed" : "❌ Not installed"}
-            </span>
-          </div>
-          
-          {extensionAvailable && (
-            <div className="flex items-center justify-between p-3 bg-muted rounded">
-              <span className="font-medium">Agent Connection</span>
-              <span className={agentStatus?.connected ? "text-green-600" : "text-amber-600"}>
-                {agentStatus?.connected 
-                  ? `✅ Connected (${agentStatus.version})` 
-                  : agentStatus 
-                    ? "❌ Disconnected" 
-                    : "⏳ Checking..."}
-              </span>
+        <CardContent>
+          <div className="flex items-center gap-4">
+            <div className="flex items-center gap-2">
+              <div className={`w-2 h-2 rounded-full ${extensionAvailable ? 'bg-green-500' : 'bg-red-500'}`} />
+              <span>Extension: {extensionAvailable ? 'Installed' : 'Not installed'}</span>
             </div>
-          )}
-
-          <Button 
-            variant="outline" 
-            onClick={checkExtension}
-            className="w-full"
-          >
-            Refresh Status
-          </Button>
+            {agentStatus && (
+              <div className="flex items-center gap-2">
+                <div className={`w-2 h-2 rounded-full ${agentStatus.connected ? 'bg-green-500' : 'bg-red-500'}`} />
+                <span>
+                  Agent: {agentStatus.connected 
+                    ? `Connected (${agentStatus.version})` 
+                    : 'Disconnected'}
+                </span>
+              </div>
+            )}
+          </div>
         </CardContent>
       </Card>
 
-      {/* Test Actions */}
-      {extensionAvailable && (
-        <Card className="mb-6">
-          <CardHeader>
-            <CardTitle>Test Actions</CardTitle>
-            <CardDescription>
-              Send test commands through the agent bridge
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            {/* Ping Test */}
-            <div className="p-4 border rounded">
-              <h3 className="font-medium mb-2">1. Simple Ping</h3>
-              <p className="text-sm text-muted-foreground mb-3">
-                Send a ping command to test basic connectivity
-              </p>
-              <Button 
-                onClick={handlePing}
-                disabled={loading}
-                variant="secondary"
-              >
-                {loading ? 'Sending...' : 'Ping Agent'}
-              </Button>
-            </div>
+      {/* Execution Types */}
+      <Tabs defaultValue="sql" className="space-y-6">
+        <TabsList className="grid w-full grid-cols-4">
+          <TabsTrigger value="sql">SQL</TabsTrigger>
+          <TabsTrigger value="rest">REST</TabsTrigger>
+          <TabsTrigger value="script">Script</TabsTrigger>
+          <TabsTrigger value="text">Text</TabsTrigger>
+        </TabsList>
 
-            {/* Execute Test */}
-            <div className="p-4 border rounded">
-              <h3 className="font-medium mb-2">2. Execute Command</h3>
-              <p className="text-sm text-muted-foreground mb-3">
-                Send a custom command through the agent
-              </p>
-              <input
-                type="text"
-                value={command}
-                onChange={(e) => setCommand(e.target.value)}
-                className="w-full p-2 border rounded mb-3 text-sm"
-                placeholder="Enter command..."
+        <TabsContent value="sql" className="space-y-4">
+          <Card>
+            <CardHeader>
+              <CardTitle>SQL Execution Test</CardTitle>
+              <CardDescription>
+                Execute SQL queries via kubectl exec into database client pods
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <SQLStepExecutor
+                stepId={1}
+                customerId={1}
+                releaseId={1}
+                query="SELECT version();"
+                config={sqlConfig}
+                onExecutionComplete={(result) => {
+                  console.log('SQL execution completed:', result);
+                }}
               />
-              <Button 
-                onClick={handleExecute}
-                disabled={loading}
-                className="bg-green-600 hover:bg-green-700"
-              >
-                {loading ? 'Executing...' : 'Execute via Agent'}
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
-      )}
+            </CardContent>
+          </Card>
 
-      {/* Result */}
-      {result && (
-        <Card>
-          <CardHeader>
-            <CardTitle>Result</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <pre className="bg-slate-950 text-slate-50 p-4 rounded text-sm overflow-auto">
-              {JSON.stringify(result, null, 2)}
-            </pre>
-          </CardContent>
-        </Card>
-      )}
+          <Card>
+            <CardHeader>
+              <CardTitle>Another SQL Example</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <SQLStepExecutor
+                stepId={2}
+                customerId={1}
+                releaseId={1}
+                query="\\dt"
+                config={{ ...sqlConfig, sqlClient: 'psql' }}
+              />
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="rest" className="space-y-4">
+          <Card>
+            <CardHeader>
+              <CardTitle>REST API Execution Test</CardTitle>
+              <CardDescription>
+                Execute REST API calls via curl in pods
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <RESTStepExecutor
+                stepId={3}
+                customerId={1}
+                releaseId={1}
+                method="GET"
+                url="/health"
+                config={restConfig}
+                onExecutionComplete={(result) => {
+                  console.log('REST execution completed:', result);
+                }}
+              />
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>POST Request Example</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <RESTStepExecutor
+                stepId={4}
+                customerId={1}
+                releaseId={1}
+                method="POST"
+                url="/api/v1/migrate"
+                payload={{ version: '1.2.3', dryRun: false }}
+                headers={{ 'X-Api-Key': 'test-key' }}
+                config={restConfig}
+              />
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="script" className="space-y-4">
+          <Card>
+            <CardHeader>
+              <CardTitle>Script Execution Test</CardTitle>
+              <CardDescription>
+                Execute custom scripts in pods
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <ScriptStepExecutor
+                stepId={5}
+                customerId={1}
+                releaseId={1}
+                content={`#!/bin/bash
+echo "Starting migration..."
+echo "Step 1: Check environment"
+env | grep -E '(DATABASE|API)' || echo "No env vars set"
+echo "Step 2: Run commands"
+echo "Done!"`}
+                interpreter="bash"
+                config={scriptConfig}
+                onExecutionComplete={(result) => {
+                  console.log('Script execution completed:', result);
+                }}
+              />
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Python Script Example</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <ScriptStepExecutor
+                stepId={6}
+                customerId={1}
+                releaseId={1}
+                content={`import json
+import sys
+
+print("Python script execution")
+print("Arguments:", sys.argv)
+print("Environment check complete")
+
+# Output some JSON
+result = {"status": "success", "items_processed": 42}
+print(json.dumps(result, indent=2))`}
+                interpreter="python"
+                config={scriptConfig}
+              />
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="text" className="space-y-4">
+          <Card>
+            <CardHeader>
+              <CardTitle>Manual Step Display</CardTitle>
+              <CardDescription>
+                Text steps for manual verification and documentation
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <TextStepDisplay
+                stepId={7}
+                content={`Please verify the following before proceeding:
+
+1. Check that all database migrations have been applied
+2. Verify that the application is responding to health checks
+3. Confirm that monitoring alerts are green
+4. Review the deployment notes for any special instructions
+
+If all checks pass, mark this step as done.`}
+                checklist={[
+                  'Database migrations verified',
+                  'Health checks passing',
+                  'Monitoring alerts green',
+                  'Deployment notes reviewed',
+                ]}
+                onMarkDone={(stepId, notes) => {
+                  console.log('Step marked as done:', stepId, notes);
+                  alert(`Step ${stepId} marked as done! Notes: ${notes}`);
+                }}
+                onSkip={(stepId, reason) => {
+                  console.log('Step skipped:', stepId, reason);
+                }}
+              />
+            </CardContent>
+          </Card>
+        </TabsContent>
+      </Tabs>
 
       {/* Setup Instructions */}
       {!extensionAvailable && (
-        <Card className="mt-6 border-amber-200 bg-amber-50">
+        <Card className="mt-8 border-amber-200 bg-amber-50">
           <CardHeader>
             <CardTitle className="text-amber-800">Setup Required</CardTitle>
           </CardHeader>
@@ -264,8 +295,8 @@ export default function AgentTestPage() {
                 <strong>Load Extension:</strong>
                 <ul className="list-disc ml-5 mt-1 text-sm">
                   <li>Open Chrome → chrome://extensions/</li>
-                  <li>Enable "Developer mode"</li>
-                  <li>Click "Load unpacked"</li>
+                  <li>Enable &quot;Developer mode&quot;</li>
+                  <li>Click &quot;Load unpacked&quot;</li>
                   <li>Select the <code>extension/</code> folder</li>
                 </ul>
               </li>
@@ -274,7 +305,7 @@ export default function AgentTestPage() {
                 <ul className="list-disc ml-5 mt-1 text-sm">
                   <li>Click extension icon in toolbar</li>
                   <li>Verify token matches: <code>poc-token-123</code></li>
-                  <li>Click "Test Connection"</li>
+                  <li>Click &quot;Test Connection&quot;</li>
                 </ul>
               </li>
               <li>
@@ -286,22 +317,4 @@ export default function AgentTestPage() {
       )}
     </div>
   );
-}
-
-// Type declarations for window
-declare global {
-  interface Window {
-    rtAgent?: {
-      version: string;
-      isAvailable(): boolean;
-      execute(request: {
-        type: string;
-        command: string;
-        context?: Record<string, any>;
-        timeout?: number;
-      }): Promise<any>;
-      getStatus(): Promise<{ connected: boolean; version?: string }>;
-      ping(): Promise<any>;
-    };
-  }
 }

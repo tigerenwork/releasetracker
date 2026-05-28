@@ -1,7 +1,7 @@
 # Technical Specification Document
 ## Local Agent Execution System
 
-### Version: 1.0
+### Version: 1.1
 ### Date: 2026-02-28
 ### Status: Draft
 
@@ -65,791 +65,402 @@
 └─────────────────────────────────────────────────────────────────────────────────┘
 ```
 
-### 1.2 Communication Flow
+---
+
+## 2. Step Type Execution Flows
+
+### 2.1 SQL Execution Flow
 
 ```
-┌──────────┐    postMessage    ┌──────────────┐    chrome.runtime    ┌──────────────┐
-│ Web App  │◄─────────────────►│   Content    │◄───────────────────►│  Background  │
-│          │                   │   Script     │    .sendMessage()    │   Service    │
-└──────────┘                   └──────────────┘                      └──────┬───────┘
-                                                                            │
-                                                                            │ fetch()
-                                                                            │
-                                                                     ┌──────▼───────┐
-                                                                     │  Local Agent │
-                                                                     │  :3456         │
-                                                                     └──────────────┘
+┌─────────────┐     ┌─────────────┐     ┌─────────────┐     ┌─────────────┐
+│   Web App   │────►│  Extension  │────►│    Agent    │────►│     K8s     │
+└──────┬──────┘     └─────────────┘     └──────┬──────┘     └──────┬──────┘
+       │                                        │                    │
+       │ 1. POST /execute                       │                    │
+       │    {                                   │                    │
+       │      type: "sql",                      │                    │
+       │      namespace: "cust-a",              │                    │
+       │      podSelector: "app=db-client",     │                    │
+       │      sqlClient: "psql",                │                    │
+       │      database: "app_prod",             │                    │
+       │      query: "ALTER TABLE...",          │                    │
+       │      useTransaction: true              │                    │
+       │    }                                   │                    │
+       │                                        │                    │
+       │                                        │ 2. Find pod        │
+       │                                        │    kubectl get     │
+       │                                        │    pods -l...      │
+       │                                        │                    │
+       │                                        │ 3. Build command   │
+       │                                        │    "psql           │
+       │                                        │     $DATABASE_URL  │
+       │                                        │     -c '...'"      │
+       │                                        │                    │
+       │                                        │ 4. kubectl exec    │
+       │                                        │    ─────────────►  │
+       │                                        │                    │
+       │                                        │                    │ 5. Execute
+       │                                        │                    │    in pod
+       │                                        │                    │
+       │                                        │ ◄────────────────  │
+       │                                        │    stdout/stderr   │
+       │ ◄──────────────────────────────────────│                    │
+       │    {success, exitCode, output}         │                    │
 ```
 
-### 1.3 Why This Architecture Works
+### 2.2 REST Execution Flow
 
-| Challenge | Solution |
-|-----------|----------|
-| CORS from HTTPS to HTTP | Browser extension has unrestricted localhost access |
-| Token security | Stored in extension's `chrome.storage.local`, not web app |
-| Cross-origin isolation | Content script bridges web app and extension contexts |
-| Real-time streaming | WebSocket connection from background script to agent |
-| User's kubeconfig | Mounted into Docker container, never leaves laptop |
+```
+┌─────────────┐     ┌─────────────┐     ┌─────────────┐     ┌─────────────┐
+│   Web App   │────►│  Extension  │────►│    Agent    │────►│     K8s     │
+└──────┬──────┘     └─────────────┘     └──────┬──────┘     └──────┬──────┘
+       │                                        │                    │
+       │ 1. POST /execute                       │                    │
+       │    {                                   │                    │
+       │      type: "rest",                     │                    │
+       │      namespace: "cust-a",              │                    │
+       │      podSelector: "app=api-client",    │                    │
+       │      method: "POST",                   │                    │
+       │      url: "/api/v1/migrate",           │                    │
+       │      baseUrl: "http://internal-api",   │                    │
+       │      payload: {...},                   │                    │
+       │      headers: {...}                    │                    │
+       │    }                                   │                    │
+       │                                        │                    │
+       │                                        │ 2. Find pod        │
+       │                                        │                    │
+       │                                        │ 3. Build curl cmd  │
+       │                                        │    "curl -X POST   │
+       │                                        │     -d '{...}'     │
+       │                                        │     http://..."    │
+       │                                        │                    │
+       │                                        │ 4. kubectl exec    │
+       │                                        │    ─────────────►  │
+       │                                        │                    │
+       │                                        │                    │ 5. curl
+       │                                        │                    │    internal
+       │                                        │                    │    service
+       │                                        │ ◄────────────────  │
+       │                                        │    HTTP response   │
+       │ ◄──────────────────────────────────────│                    │
+       │    {success, statusCode, body}         │                    │
+```
+
+### 2.3 Script Execution Flow
+
+```
+┌─────────────┐     ┌─────────────┐     ┌─────────────┐     ┌─────────────┐
+│   Web App   │────►│  Extension  │────►│    Agent    │────►│     K8s     │
+└──────┬──────┘     └─────────────┘     └──────┬──────┘     └──────┬──────┘
+       │                                        │                    │
+       │ 1. POST /execute                       │                    │
+       │    {                                   │                    │
+       │      type: "script",                   │                    │
+       │      namespace: "cust-a",              │                    │
+       │      podSelector: "app=executor",      │                    │
+       │      interpreter: "bash",              │                    │
+       │      content: "#!/bin/bash\necho...",  │                    │
+       │      environment: {...}                │                    │
+       │    }                                   │                    │
+       │                                        │                    │
+       │                                        │ 2. Find pod        │
+       │                                        │                    │
+       │                                        │ 3. Stream script   │
+       │                                        │    via stdin       │
+       │                                        │                    │
+       │                                        │ 4. kubectl exec    │
+       │                                        │    bash -c         │
+       │                                        │    ─────────────►  │
+       │                                        │                    │
+       │                                        │                    │ 5. Execute
+       │                                        │                    │    script
+       │                                        │                    │
+       │                                        │ ◄────────────────  │
+       │                                        │    stdout/stderr   │
+       │ ◄──────────────────────────────────────│                    │
+       │    {success, exitCode, output}         │                    │
+```
 
 ---
 
-## 2. Browser Extension Specification
+## 3. Execution API Specification
 
-### 2.1 Manifest V3 Configuration
+### 3.1 Request Format
 
-```json
-{
-  "manifest_version": 3,
-  "name": "Release Tracker Agent Bridge",
-  "version": "1.0.0",
-  "description": "Bridge between Release Tracker web app and local execution agent",
-  "permissions": [
-    "storage",
-    "activeTab"
-  ],
-  "host_permissions": [
-    "http://localhost:3456/*",
-    "https://*.vercel.app/*"
-  ],
-  "content_scripts": [
-    {
-      "matches": ["https://*.vercel.app/*", "http://localhost:3000/*"],
-      "js": ["injected.js", "content.js"],
-      "run_at": "document_start",
-      "world": "MAIN"
-    }
-  ],
-  "background": {
-    "service_worker": "background.js",
-    "type": "module"
-  },
-  "action": {
-    "default_popup": "popup.html",
-    "default_icon": {
-      "16": "icons/icon16.png",
-      "48": "icons/icon48.png",
-      "128": "icons/icon128.png"
-    }
-  },
-  "icons": {
-    "16": "icons/icon16.png",
-    "48": "icons/icon48.png",
-    "128": "icons/icon128.png"
-  }
+```typescript
+interface ExecutionRequest {
+  // Common fields for all types
+  id: string;                    // Unique execution ID
+  type: 'sql' | 'rest' | 'script' | 'text';
+  context: {
+    customerId: number;
+    clusterId: number;
+    namespace: string;
+    podSelector: string;
+    containerName?: string;
+    stepId: number;
+    releaseId: number;
+  };
+  timeout?: number;              // Seconds, default: 300
+  
+  // Type-specific fields (mutually exclusive)
+  sql?: SQLExecutionConfig;
+  rest?: RESTExecutionConfig;
+  script?: ScriptExecutionConfig;
+}
+
+interface SQLExecutionConfig {
+  client: 'psql' | 'mysql' | 'mongosh' | 'redis-cli';
+  database?: string;             // Logical name, resolved to env var
+  query: string;
+  useTransaction?: boolean;
+}
+
+interface RESTExecutionConfig {
+  method: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
+  url: string;                   // Relative path
+  baseUrl?: string;              // Optional override
+  payload?: Record<string, any>; // JSON payload
+  headers?: Record<string, string>;
+  expectJson?: boolean;          // Parse response as JSON
+}
+
+interface ScriptExecutionConfig {
+  interpreter: 'bash' | 'python' | 'node';
+  content: string;               // Script content
+  environment?: Record<string, string>;
+  workingDir?: string;
 }
 ```
 
-### 2.2 Injected Script (injected.js)
-
-Runs in page context, exposes `window.releaseTrackerAgent` API.
+### 3.2 Response Format
 
 ```typescript
-// injected.js - Runs in MAIN world (page context)
-
-interface ExecutionRequest {
-  id: string;
-  type: 'kubectl' | 'sql' | 'bash' | 'docker';
-  command: string;
-  context: {
-    cluster?: string;
-    namespace?: string;
-    customerId?: number;
-    stepId?: number;
-  };
-  timeout?: number;
-}
-
 interface ExecutionResponse {
   success: boolean;
+  executionId: string;
+  type: 'sql' | 'rest' | 'script';
+  
+  // Common result fields
   exitCode?: number;
-  stdout?: string;
-  stderr?: string;
-  error?: string;
-  duration?: number;
-}
-
-(function() {
-  'use strict';
+  duration: number;              // Milliseconds
+  timestamp: string;             // ISO 8601
   
-  // Prevent double-injection
-  if (window.releaseTrackerAgent) return;
+  // Type-specific outputs
+  sql?: SQLResult;
+  rest?: RESTResult;
+  script?: ScriptResult;
   
-  const pendingRequests = new Map();
-  
-  window.releaseTrackerAgent = {
-    version: '1.0.0',
-    
-    isAvailable(): boolean {
-      return document.querySelector('meta[name="rt-extension-installed"]') !== null;
-    },
-    
-    async execute(request: ExecutionRequest): Promise<ExecutionResponse> {
-      return new Promise((resolve, reject) => {
-        const timeout = setTimeout(() => {
-          pendingRequests.delete(request.id);
-          reject(new Error('Request timeout'));
-        }, request.timeout || 300000);
-        
-        const handler = (event: MessageEvent) => {
-          if (event.source !== window) return;
-          if (event.data?.type !== 'RT_EXECUTE_RESULT') return;
-          if (event.data.requestId !== request.id) return;
-          
-          clearTimeout(timeout);
-          window.removeEventListener('message', handler);
-          pendingRequests.delete(request.id);
-          
-          if (event.data.success) {
-            resolve(event.data.result);
-          } else {
-            reject(new Error(event.data.error));
-          }
-        };
-        
-        window.addEventListener('message', handler);
-        pendingRequests.set(request.id, { resolve, reject, handler });
-        
-        window.postMessage({
-          type: 'RT_EXECUTE',
-          requestId: request.id,
-          payload: request
-        }, '*');
-      });
-    },
-    
-    async getStatus(): Promise<{ connected: boolean; version?: string }> {
-      return new Promise((resolve) => {
-        const timeout = setTimeout(() => resolve({ connected: false }), 5000);
-        
-        const handler = (event: MessageEvent) => {
-          if (event.data?.type === 'RT_STATUS_RESULT') {
-            clearTimeout(timeout);
-            window.removeEventListener('message', handler);
-            resolve(event.data.status);
-          }
-        };
-        
-        window.addEventListener('message', handler);
-        window.postMessage({ type: 'RT_GET_STATUS' }, '*');
-      });
-    }
+  // Error info (if success=false)
+  error?: {
+    code: string;
+    message: string;
+    details?: any;
   };
-  
-  // Signal extension presence
-  const meta = document.createElement('meta');
-  meta.name = 'rt-extension-installed';
-  meta.content = '1.0.0';
-  document.head.appendChild(meta);
-})();
-```
-
-### 2.3 Content Script (content.js)
-
-Runs in ISOLATED world, bridges page and background.
-
-```typescript
-// content.js - Runs in ISOLATED world
-
-// Relay messages from page to background
-window.addEventListener('message', async (event) => {
-  if (event.source !== window) return;
-  if (!event.data?.type?.startsWith('RT_')) return;
-  
-  switch (event.data.type) {
-    case 'RT_EXECUTE': {
-      try {
-        const result = await chrome.runtime.sendMessage({
-          action: 'execute',
-          request: event.data.payload
-        });
-        
-        window.postMessage({
-          type: 'RT_EXECUTE_RESULT',
-          requestId: event.data.requestId,
-          success: result.success,
-          result: result.data,
-          error: result.error
-        }, '*');
-      } catch (err) {
-        window.postMessage({
-          type: 'RT_EXECUTE_RESULT',
-          requestId: event.data.requestId,
-          success: false,
-          error: err.message
-        }, '*');
-      }
-      break;
-    }
-    
-    case 'RT_GET_STATUS': {
-      const status = await chrome.runtime.sendMessage({ action: 'getStatus' });
-      window.postMessage({
-        type: 'RT_STATUS_RESULT',
-        status
-      }, '*');
-      break;
-    }
-  }
-});
-```
-
-### 2.4 Background Service Worker (background.js)
-
-Handles HTTP communication with local agent.
-
-```typescript
-// background.js - Service Worker
-
-const DEFAULT_AGENT_URL = 'http://localhost:3456';
-
-// Keep-alive for long-running executions
-let activeConnections = 0;
-
-chrome.runtime.onConnect.addListener((port) => {
-  activeConnections++;
-  port.onDisconnect.addListener(() => activeConnections--);
-});
-
-// Message handlers
-chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
-  handleMessage(request).then(sendResponse).catch(err => {
-    sendResponse({ success: false, error: err.message });
-  });
-  return true; // Keep channel open for async
-});
-
-async function handleMessage(request) {
-  const { agentUrl, token } = await chrome.storage.local.get([
-    'agentUrl',
-    'agentToken'
-  ]);
-  
-  const baseUrl = agentUrl || DEFAULT_AGENT_URL;
-  
-  switch (request.action) {
-    case 'execute':
-      return executeCommand(baseUrl, token, request.request);
-    case 'getStatus':
-      return checkStatus(baseUrl, token);
-    case 'testConnection':
-      return testConnection(baseUrl, token);
-    default:
-      throw new Error(`Unknown action: ${request.action}`);
-  }
 }
 
-async function executeCommand(baseUrl: string, token: string, request: any) {
-  const response = await fetch(`${baseUrl}/api/v1/execute`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'X-Agent-Token': token
-    },
-    body: JSON.stringify(request)
-  });
-  
-  if (!response.ok) {
-    const error = await response.text();
-    throw new Error(`Agent error: ${error}`);
-  }
-  
-  return await response.json();
+interface SQLResult {
+  stdout: string;
+  stderr: string;
+  rowCount?: number;
+  rows?: any[];                  // For SELECT queries (limited)
+  command?: string;              // The actual SQL command executed
 }
 
-async function checkStatus(baseUrl: string, token: string) {
-  try {
-    const response = await fetch(`${baseUrl}/health`, {
-      headers: { 'X-Agent-Token': token },
-      signal: AbortSignal.timeout(3000)
-    });
-    
-    if (response.ok) {
-      const data = await response.json();
-      return { connected: true, version: data.version };
-    }
-    return { connected: false };
-  } catch {
-    return { connected: false };
-  }
+interface RESTResult {
+  statusCode: number;
+  statusText?: string;
+  headers: Record<string, string>;
+  body: string;                  // Raw response body
+  json?: any;                    // Parsed JSON (if expectJson=true)
+  latency: number;               // Request latency in ms
+}
+
+interface ScriptResult {
+  stdout: string;
+  stderr: string;
+  exitCode: number;
+  command: string;               // The actual command executed
 }
 ```
 
-### 2.5 Popup UI (popup.html / popup.js)
+### 3.3 API Endpoints
 
-```typescript
-// popup.js - Extension settings UI
+#### Execute Command
+```
+POST /api/v1/execute
+Content-Type: application/json
+X-Agent-Token: <token>
 
-document.addEventListener('DOMContentLoaded', async () => {
-  const urlInput = document.getElementById('agentUrl');
-  const tokenInput = document.getElementById('agentToken');
-  const statusDiv = document.getElementById('status');
-  const saveBtn = document.getElementById('save');
-  const testBtn = document.getElementById('test');
-  
-  // Load saved settings
-  const saved = await chrome.storage.local.get(['agentUrl', 'agentToken']);
-  urlInput.value = saved.agentUrl || 'http://localhost:3456';
-  tokenInput.value = saved.agentToken || '';
-  
-  // Update status indicator
-  async function updateStatus() {
-    const status = await chrome.runtime.sendMessage({ action: 'getStatus' });
-    statusDiv.textContent = status.connected 
-      ? `🟢 Connected (v${status.version})`
-      : '🔴 Disconnected';
-    statusDiv.className = status.connected ? 'connected' : 'disconnected';
-  }
-  
-  await updateStatus();
-  
-  // Save settings
-  saveBtn.addEventListener('click', async () => {
-    await chrome.storage.local.set({
-      agentUrl: urlInput.value,
-      agentToken: tokenInput.value
-    });
-    await updateStatus();
-  });
-  
-  // Test connection
-  testBtn.addEventListener('click', async () => {
-    testBtn.disabled = true;
-    await updateStatus();
-    testBtn.disabled = false;
-  });
-});
+Body: ExecutionRequest
+
+Response: ExecutionResponse
+```
+
+#### Cancel Execution
+```
+POST /api/v1/execute/:id/cancel
+X-Agent-Token: <token>
+
+Response: { success: boolean, message: string }
+```
+
+#### Stream Execution (WebSocket)
+```
+WS /ws/execute?id=<executionId>&token=<token>
+
+// Client -> Server
+{ type: "start", request: ExecutionRequest }
+
+// Server -> Client (streaming)
+{ type: "stdout", data: "..." }
+{ type: "stderr", data: "..." }
+{ type: "progress", percent: 50 }
+{ type: "complete", result: ExecutionResponse }
+{ type: "error", error: {...} }
 ```
 
 ---
 
-## 3. Local Agent Specification
+## 4. Agent Implementation
 
-### 3.1 Docker Compose Configuration
-
-```yaml
-# docker-compose.yml
-
-version: '3.8'
-
-services:
-  agent:
-    build:
-      context: ./agent
-      dockerfile: Dockerfile
-    container_name: release-tracker-agent
-    ports:
-      - "3456:3456"
-    environment:
-      - AGENT_TOKEN=${AGENT_TOKEN}
-      - LOG_LEVEL=info
-      - MAX_CONCURRENT_EXECUTIONS=5
-      - DEFAULT_TIMEOUT=300
-    volumes:
-      # Kubernetes configuration
-      - ~/.kube:/root/.kube:ro
-      # SSH keys for git operations
-      - ~/.ssh:/root/.ssh:ro
-      # Docker socket for docker commands
-      - /var/run/docker.sock:/var/run/docker.sock
-      # Execution logs persistence
-      - ./data/agent-logs:/app/logs
-    restart: unless-stopped
-    networks:
-      - agent-network
-
-networks:
-  agent-network:
-    driver: bridge
-```
-
-### 3.2 Dockerfile
-
-```dockerfile
-# agent/Dockerfile
-
-FROM node:20-alpine
-
-# Install dependencies
-RUN apk add --no-cache \
-    bash \
-    curl \
-    openssh-client \
-    git \
-    # Kubernetes tools
-    kubectl \
-    # Database clients
-    postgresql-client \
-    mysql-client \
-    redis \
-    # Optional: MongoDB client
-    mongodb-tools
-
-WORKDIR /app
-
-# Copy package files
-COPY package*.json ./
-RUN npm ci --only=production
-
-# Copy application
-COPY . .
-
-# Create logs directory
-RUN mkdir -p /app/logs
-
-# Health check
-HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
-  CMD curl -f -H "X-Agent-Token: $AGENT_TOKEN" http://localhost:3456/health || exit 1
-
-EXPOSE 3456
-
-CMD ["node", "dist/server.js"]
-```
-
-### 3.3 Agent Server (Express + TypeScript)
+### 4.1 Server Structure
 
 ```typescript
 // agent/src/server.ts
 
 import express from 'express';
-import cors from 'cors';
-import helmet from 'helmet';
 import { createServer } from 'http';
 import { WebSocketServer } from 'ws';
-import { config } from './config';
-import { authMiddleware } from './middleware/auth';
-import { executionRouter } from './routes/execution';
-import { statusRouter } from './routes/status';
-import { logger } from './utils/logger';
-import { ExecutionManager } from './services/execution-manager';
+import { SQLExecutor } from './executors/sql';
+import { RESTExecutor } from './executors/rest';
+import { ScriptExecutor } from './executors/script';
 
 const app = express();
 const server = createServer(app);
-const wss = new WebSocketServer({ server, path: '/ws' });
+const wss = new WebSocketServer({ server });
 
-// Security middleware
-app.use(helmet());
-app.use(cors({
-  origin: (origin, callback) => {
-    // Allow requests with no origin (curl, etc.)
-    if (!origin) return callback(null, true);
-    // Allow Chrome extension
-    if (origin.startsWith('chrome-extension://')) return callback(null, true);
-    // Deny others
-    callback(new Error('Not allowed by CORS'));
-  }
-}));
-
-app.use(express.json({ limit: '10mb' }));
-
-// Auth middleware for all routes except health
-app.use('/api', authMiddleware);
-app.use('/ws', authMiddleware);
-
-// Routes
-app.use('/health', statusRouter);
-app.use('/api/v1/execute', executionRouter);
-
-// WebSocket for streaming
-wss.on('connection', (ws, req) => {
-  logger.info('WebSocket connection established');
+// Request routing based on type
+app.post('/api/v1/execute', async (req, res) => {
+  const { type } = req.body;
   
-  ws.on('message', async (data) => {
-    try {
-      const message = JSON.parse(data.toString());
-      
-      if (message.type === 'execute') {
-        const executionManager = new ExecutionManager();
-        await executionManager.executeStreaming(message.request, ws);
-      }
-    } catch (err) {
-      ws.send(JSON.stringify({
-        type: 'error',
-        error: err.message
-      }));
-    }
-  });
-});
-
-server.listen(config.port, () => {
-  logger.info(`Agent listening on port ${config.port}`);
-});
-```
-
-### 3.4 Execution Manager
-
-```typescript
-// agent/src/services/execution-manager.ts
-
-import { spawn, ChildProcess } from 'child_process';
-import { WebSocket } from 'ws';
-import { logger } from '../utils/logger';
-import { config } from '../config';
-
-interface ExecutionRequest {
-  id: string;
-  type: 'kubectl' | 'sql' | 'bash' | 'docker';
-  command: string;
-  context: {
-    cluster?: string;
-    namespace?: string;
-    podSelector?: string;
-    container?: string;
-  };
-  timeout?: number;
-}
-
-interface ExecutionResult {
-  success: boolean;
-  exitCode: number;
-  stdout: string;
-  stderr: string;
-  duration: number;
-}
-
-export class ExecutionManager {
-  private activeExecutions = new Map<string, ChildProcess>();
-
-  async executeStreaming(request: ExecutionRequest, ws: WebSocket): Promise<void> {
-    const startTime = Date.now();
-    const timeout = request.timeout || config.defaultTimeout;
-    
-    logger.info(`Starting execution ${request.id}: ${request.type}`);
-    
-    // Build command based on type
-    const { cmd, args } = this.buildCommand(request);
-    
-    // Check whitelist
-    if (!this.isCommandAllowed(cmd, args)) {
-      ws.send(JSON.stringify({
-        type: 'error',
-        error: 'Command not allowed by security policy'
-      }));
-      return;
-    }
-    
-    // Spawn process
-    const child = spawn(cmd, args, {
-      shell: true,
-      env: {
-        ...process.env,
-        KUBECONFIG: '/root/.kube/config'
-      }
-    });
-    
-    this.activeExecutions.set(request.id, child);
-    
-    // Set timeout
-    const timeoutId = setTimeout(() => {
-      child.kill('SIGTERM');
-      ws.send(JSON.stringify({
-        type: 'timeout',
-        message: `Execution timed out after ${timeout}s`
-      }));
-    }, timeout * 1000);
-    
-    // Stream stdout
-    child.stdout.on('data', (data) => {
-      ws.send(JSON.stringify({
-        type: 'stdout',
-        data: data.toString()
-      }));
-    });
-    
-    // Stream stderr
-    child.stderr.on('data', (data) => {
-      ws.send(JSON.stringify({
-        type: 'stderr',
-        data: data.toString()
-      }));
-    });
-    
-    // Handle completion
-    child.on('close', (code) => {
-      clearTimeout(timeoutId);
-      this.activeExecutions.delete(request.id);
-      
-      const duration = Date.now() - startTime;
-      
-      ws.send(JSON.stringify({
-        type: 'complete',
-        exitCode: code,
-        duration
-      }));
-      
-      logger.info(`Execution ${request.id} completed with exit code ${code}`);
-    });
-    
-    // Handle errors
-    child.on('error', (err) => {
-      clearTimeout(timeoutId);
-      this.activeExecutions.delete(request.id);
-      
-      ws.send(JSON.stringify({
-        type: 'error',
-        error: err.message
-      }));
-    });
-  }
-  
-  cancelExecution(executionId: string): boolean {
-    const child = this.activeExecutions.get(executionId);
-    if (child) {
-      child.kill('SIGTERM');
-      this.activeExecutions.delete(executionId);
-      return true;
-    }
-    return false;
-  }
-  
-  private buildCommand(request: ExecutionRequest): { cmd: string; args: string[] } {
-    switch (request.type) {
-      case 'kubectl':
-        return { cmd: 'kubectl', args: request.command.split(' ') };
-        
-      case 'sql': {
-        // Build kubectl exec command for SQL execution
-        const { namespace, podSelector, container } = request.context;
-        const podName = this.resolvePodName(namespace!, podSelector!);
-        
-        const execCmd = [
-          'kubectl', 'exec',
-          '-n', namespace!,
-          podName,
-          ...(container ? ['-c', container] : []),
-          '--', 'sh', '-c',
-          request.command // SQL command passed to pod
-        ];
-        
-        return { cmd: 'sh', args: ['-c', execCmd.join(' ')] };
-      }
-        
-      case 'bash':
-        return { cmd: 'bash', args: ['-c', request.command] };
-        
-      case 'docker':
-        return { cmd: 'docker', args: request.command.split(' ') };
-        
+  try {
+    let result;
+    switch (type) {
+      case 'sql':
+        result = await sqlExecutor.execute(req.body);
+        break;
+      case 'rest':
+        result = await restExecutor.execute(req.body);
+        break;
+      case 'script':
+        result = await scriptExecutor.execute(req.body);
+        break;
       default:
-        throw new Error(`Unknown execution type: ${request.type}`);
+        throw new Error(`Unknown execution type: ${type}`);
     }
-  }
-  
-  private resolvePodName(namespace: string, selector: string): string {
-    // Use kubectl to find pod by label selector
-    const result = spawn.sync('kubectl', [
-      'get', 'pods',
-      '-n', namespace,
-      '-l', selector,
-      '-o', 'jsonpath={.items[0].metadata.name}'
-    ], { encoding: 'utf8' });
-    
-    if (result.error || !result.stdout) {
-      throw new Error(`Failed to find pod in namespace ${namespace} with selector ${selector}`);
-    }
-    
-    return result.stdout.trim();
-  }
-  
-  private isCommandAllowed(cmd: string, args: string[]): boolean {
-    const fullCommand = `${cmd} ${args.join(' ')}`;
-    
-    for (const pattern of config.commandWhitelist) {
-      const regex = new RegExp(pattern);
-      if (regex.test(fullCommand)) {
-        return true;
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({
+      success: false,
+      error: {
+        code: 'EXECUTION_FAILED',
+        message: err.message
       }
-    }
-    
-    return false;
+    });
   }
-}
+});
 ```
 
-### 3.5 SQL Execution Helper
+### 4.2 SQL Executor
 
 ```typescript
-// agent/src/services/sql-executor.ts
+// agent/src/executors/sql.ts
 
 import { spawn } from 'child_process';
-import { logger } from '../utils/logger';
-
-interface SQLExecutionOptions {
-  namespace: string;
-  podSelector: string;
-  container?: string;
-  client: 'psql' | 'mysql' | 'mongosh' | 'redis-cli';
-  database: string;  // Logical name (env var will be resolved in pod)
-  query: string;
-}
+import { ExecutionRequest, ExecutionResponse } from '../types';
 
 export class SQLExecutor {
-  async execute(options: SQLExecutionOptions): Promise<{
-    success: boolean;
-    output: string;
-    rows?: any[];
-  }> {
-    const { namespace, podSelector, container, client, database, query } = options;
+  async execute(request: ExecutionRequest): Promise<ExecutionResponse> {
+    const { sql, context } = request;
+    const startTime = Date.now();
     
-    // Find the target pod
-    const podName = await this.findPod(namespace, podSelector);
+    // 1. Find target pod
+    const podName = await this.findPod(
+      context.namespace,
+      context.podSelector
+    );
     
-    // Build the SQL command based on client type
-    const sqlCommand = this.buildSQLCommand(client, database, query);
+    // 2. Build SQL command
+    const sqlCommand = this.buildSQLCommand(sql!);
     
-    // Build kubectl exec command
+    // 3. Build kubectl exec command
     const kubectlArgs = [
       'exec',
-      '-n', namespace,
+      '-n', context.namespace,
       podName,
-      ...(container ? ['-c', container] : []),
+      ...(context.containerName ? ['-c', context.containerName] : []),
       '--', 'sh', '-c', sqlCommand
     ];
     
-    logger.info(`Executing SQL via kubectl: kubectl ${kubectlArgs.join(' ')}`);
+    // 4. Execute
+    const { stdout, stderr, exitCode } = await this.execKubectl(kubectlArgs);
     
-    return new Promise((resolve, reject) => {
-      const child = spawn('kubectl', kubectlArgs);
-      let stdout = '';
-      let stderr = '';
-      
-      child.stdout.on('data', (data) => stdout += data.toString());
-      child.stderr.on('data', (data) => stderr += data.toString());
-      
-      child.on('close', (code) => {
-        if (code === 0) {
-          resolve({
-            success: true,
-            output: stdout,
-            rows: this.parseOutput(client, stdout)
-          });
-        } else {
-          resolve({
-            success: false,
-            output: stderr || stdout
-          });
-        }
-      });
-      
-      child.on('error', reject);
-    });
+    // 5. Parse result (for SELECT queries)
+    const rows = exitCode === 0 ? this.parseRows(sql!.client, stdout) : undefined;
+    
+    return {
+      success: exitCode === 0,
+      executionId: request.id,
+      type: 'sql',
+      exitCode,
+      duration: Date.now() - startTime,
+      timestamp: new Date().toISOString(),
+      sql: {
+        stdout,
+        stderr,
+        rowCount: rows?.length,
+        rows: rows?.slice(0, 1000), // Limit rows
+        command: sqlCommand
+      }
+    };
   }
   
-  private buildSQLCommand(client: string, database: string, query: string): string {
-    const escapedQuery = query.replace(/"/g, '\\"');
-    const dbVar = `${database.toUpperCase()}_URL`;
+  private buildSQLCommand(sql: SQLExecutionConfig): string {
+    const { client, database, query, useTransaction } = sql;
+    const escapedQuery = query.replace(/'/g, "'\"'\"'");
+    
+    let command: string;
     
     switch (client) {
       case 'psql':
-        return `psql "\${${dbVar}}" -c "${escapedQuery}"`;
+        const dbVar = database ? `\${${database.toUpperCase()}_URL}` : '$DATABASE_URL';
+        command = `psql "${dbVar}" -c '${escapedQuery}'`;
+        break;
+        
       case 'mysql':
-        return `mysql -e "${escapedQuery}"`;
+        command = `mysql -e '${escapedQuery}'`;
+        break;
+        
       case 'mongosh':
-        return `mongosh "\${${dbVar}}" --eval "${escapedQuery}"`;
+        const mongoVar = database ? `\${${database.toUpperCase()}_URL}` : '$MONGODB_URL';
+        command = `mongosh "${mongoVar}" --eval '${escapedQuery}'`;
+        break;
+        
       case 'redis-cli':
-        return `redis-cli ${escapedQuery}`;
+        command = `redis-cli ${escapedQuery}`;
+        break;
+        
       default:
         throw new Error(`Unsupported SQL client: ${client}`);
     }
+    
+    // Wrap in transaction if requested
+    if (useTransaction && client !== 'redis-cli') {
+      command = `sh -c 'set -e; ${command};'`;
+    }
+    
+    return command;
   }
   
   private async findPod(namespace: string, selector: string): Promise<string> {
@@ -874,442 +485,454 @@ export class SQLExecutor {
     });
   }
   
-  private parseOutput(client: string, output: string): any[] | undefined {
-    // Parse tabular output for SELECT queries
-    if (client === 'psql') {
-      // Simple CSV parsing for psql output
-      const lines = output.trim().split('\n');
-      if (lines.length < 2) return undefined;
+  private async execKubectl(args: string[]): Promise<{
+    stdout: string;
+    stderr: string;
+    exitCode: number;
+  }> {
+    return new Promise((resolve) => {
+      const child = spawn('kubectl', args);
+      let stdout = '';
+      let stderr = '';
       
-      // Skip header separator line (----+----)
-      const dataLines = lines.filter(l => !l.includes('---') && l.trim());
+      child.stdout.on('data', (data) => stdout += data.toString());
+      child.stderr.on('data', (data) => stderr += data.toString());
       
-      return dataLines.slice(1).map(line => {
-        // Parse pipe-separated values
-        return line.split('|').map(v => v.trim());
+      child.on('close', (exitCode) => {
+        resolve({ stdout, stderr, exitCode: exitCode || 0 });
       });
+    });
+  }
+  
+  private parseRows(client: string, output: string): any[] | undefined {
+    // Simple parsing for psql output
+    if (client === 'psql') {
+      const lines = output.trim().split('\n');
+      if (lines.length < 3) return undefined;
+      
+      // Skip header separator (----+----)
+      const dataLines = lines.filter(l => 
+        !l.match(/^\s*[\+|\-]+\s*$/) && l.trim()
+      );
+      
+      if (dataLines.length < 2) return undefined;
+      
+      // Parse pipe-separated rows
+      return dataLines.slice(1).map(line => 
+        line.split('|').map(v => v.trim())
+      );
     }
     return undefined;
   }
 }
 ```
 
----
-
-## 4. Web App Integration
-
-### 4.1 Agent Bridge Service
+### 4.3 REST Executor
 
 ```typescript
-// src/lib/services/agent-bridge.ts
+// agent/src/executors/rest.ts
 
-interface AgentStatus {
-  available: boolean;
-  connected: boolean;
-  version?: string;
-  error?: string;
-}
+import { ExecutionRequest, ExecutionResponse } from '../types';
 
-interface ExecutionRequest {
-  id: string;
-  type: 'kubectl' | 'sql' | 'bash' | 'docker';
-  command: string;
-  context: {
-    cluster?: string;
-    namespace?: string;
-    podSelector?: string;
-    customerId: number;
-    stepId: number;
-  };
-  timeout?: number;
-}
-
-interface ExecutionUpdate {
-  type: 'stdout' | 'stderr' | 'complete' | 'error' | 'timeout';
-  data?: string;
-  exitCode?: number;
-  duration?: number;
-  error?: string;
-}
-
-class AgentBridge {
-  private status: AgentStatus = { available: false, connected: false };
-  private statusListeners: ((status: AgentStatus) => void)[] = [];
-  private checkInterval?: NodeJS.Timeout;
-  
-  constructor() {
-    this.startStatusCheck();
-  }
-  
-  // Subscribe to status changes
-  onStatusChange(callback: (status: AgentStatus) => void): () => void {
-    this.statusListeners.push(callback);
-    callback(this.status); // Initial status
-    return () => {
-      this.statusListeners = this.statusListeners.filter(cb => cb !== callback);
+export class RESTExecutor {
+  async execute(request: ExecutionRequest): Promise<ExecutionResponse> {
+    const { rest, context } = request;
+    const startTime = Date.now();
+    
+    // 1. Find target pod
+    const podName = await this.findPod(
+      context.namespace,
+      context.podSelector
+    );
+    
+    // 2. Build curl command
+    const curlCommand = this.buildCurlCommand(rest!);
+    
+    // 3. Execute kubectl exec with curl
+    const kubectlArgs = [
+      'exec',
+      '-n', context.namespace,
+      podName,
+      ...(context.containerName ? ['-c', context.containerName] : []),
+      '--', 'sh', '-c', curlCommand
+    ];
+    
+    // 4. Execute
+    const { stdout, stderr, exitCode } = await this.execKubectl(kubectlArgs);
+    
+    // 5. Parse HTTP response from curl output
+    const { statusCode, headers, body } = this.parseHttpResponse(stdout);
+    
+    // 6. Parse JSON if expected
+    let json: any;
+    if (rest!.expectJson) {
+      try {
+        json = JSON.parse(body);
+      } catch {
+        // Ignore parse errors
+      }
+    }
+    
+    return {
+      success: exitCode === 0 && statusCode >= 200 && statusCode < 300,
+      executionId: request.id,
+      type: 'rest',
+      exitCode,
+      duration: Date.now() - startTime,
+      timestamp: new Date().toISOString(),
+      rest: {
+        statusCode,
+        headers,
+        body,
+        json,
+        latency: Date.now() - startTime
+      },
+      error: exitCode !== 0 || statusCode >= 400 ? {
+        code: 'HTTP_ERROR',
+        message: `HTTP ${statusCode}: ${body.slice(0, 200)}`
+      } : undefined
     };
   }
   
-  private setStatus(newStatus: AgentStatus) {
-    this.status = newStatus;
-    this.statusListeners.forEach(cb => cb(newStatus));
-  }
-  
-  // Check if extension is installed
-  isExtensionInstalled(): boolean {
-    return typeof window !== 'undefined' && 
-           !!window.releaseTrackerAgent?.isAvailable?.();
-  }
-  
-  // Start periodic status checks
-  private startStatusCheck() {
-    this.checkStatus();
-    this.checkInterval = setInterval(() => this.checkStatus(), 5000);
-  }
-  
-  async checkStatus(): Promise<AgentStatus> {
-    if (!this.isExtensionInstalled()) {
-      this.setStatus({ available: false, connected: false, error: 'Extension not installed' });
-      return this.status;
-    }
+  private buildCurlCommand(rest: RESTExecutionConfig): string {
+    const { method, url, baseUrl, payload, headers } = rest;
     
-    try {
-      const status = await window.releaseTrackerAgent!.getStatus();
-      this.setStatus({
-        available: true,
-        connected: status.connected,
-        version: status.version
-      });
-    } catch (err) {
-      this.setStatus({
-        available: true,
-        connected: false,
-        error: err.message
-      });
-    }
+    const fullUrl = baseUrl 
+      ? `${baseUrl.replace(/\/$/, '')}${url}`
+      : url;
     
-    return this.status;
-  }
-  
-  // Execute command with streaming updates
-  async execute(
-    request: ExecutionRequest,
-    onUpdate: (update: ExecutionUpdate) => void
-  ): Promise<void> {
-    if (!this.isExtensionInstalled()) {
-      throw new Error('Agent extension not installed');
-    }
+    const parts = ['curl', '-s', '-w', '\\n%{http_code}', '-X', method];
     
-    try {
-      const result = await window.releaseTrackerAgent!.execute(request);
-      
-      // For non-streaming response, simulate updates
-      if (result.stdout) {
-        onUpdate({ type: 'stdout', data: result.stdout });
+    // Add headers
+    if (headers) {
+      for (const [key, value] of Object.entries(headers)) {
+        parts.push('-H', `'${key}: ${value}'`);
       }
-      if (result.stderr) {
-        onUpdate({ type: 'stderr', data: result.stderr });
-      }
-      onUpdate({
-        type: 'complete',
-        exitCode: result.exitCode,
-        duration: result.duration
-      });
-    } catch (err) {
-      onUpdate({ type: 'error', error: err.message });
-      throw err;
     }
+    
+    // Add content-type for POST/PUT/PATCH
+    if (['POST', 'PUT', 'PATCH'].includes(method)) {
+      parts.push('-H', 'Content-Type: application/json');
+    }
+    
+    // Add payload
+    if (payload) {
+      const json = JSON.stringify(payload).replace(/'/g, "'\"'\"'");
+      parts.push('-d', `'${json}'`);
+    }
+    
+    parts.push(`'${fullUrl}'`);
+    
+    return parts.join(' ');
   }
   
-  destroy() {
-    if (this.checkInterval) {
-      clearInterval(this.checkInterval);
-    }
-  }
-}
-
-// Global instance
-export const agentBridge = typeof window !== 'undefined' ? new AgentBridge() : null;
-
-// Type declarations for window
-declare global {
-  interface Window {
-    releaseTrackerAgent?: {
-      version: string;
-      isAvailable(): boolean;
-      execute(request: ExecutionRequest): Promise<any>;
-      getStatus(): Promise<{ connected: boolean; version?: string }>;
+  private parseHttpResponse(output: string): {
+    statusCode: number;
+    headers: Record<string, string>;
+    body: string;
+  } {
+    const lines = output.trim().split('\n');
+    const statusCode = parseInt(lines[lines.length - 1], 10) || 0;
+    const body = lines.slice(0, -1).join('\n');
+    
+    return {
+      statusCode,
+      headers: {}, // Could parse from curl -i output if needed
+      body
     };
   }
+  
+  // ... findPod and execKubectl same as SQLExecutor
 }
 ```
 
-### 4.2 Execution UI Component
+### 4.4 Script Executor
 
 ```typescript
-// src/components/steps/step-executor.tsx
+// agent/src/executors/script.ts
 
-'use client';
+import { ExecutionRequest, ExecutionResponse } from '../types';
 
-import { useState, useCallback, useEffect } from 'react';
-import { Button } from '@/components/ui/button';
-import { Terminal } from '@/components/ui/terminal';
-import { agentBridge, ExecutionUpdate } from '@/lib/services/agent-bridge';
-import { useToast } from '@/components/ui/use-toast';
-
-interface StepExecutorProps {
-  stepId: number;
-  customerId: number;
-  type: 'kubectl' | 'sql' | 'bash' | 'docker';
-  command: string;
-  context: {
-    cluster?: string;
-    namespace?: string;
-    podSelector?: string;
-  };
-  onExecutionComplete?: (success: boolean, output: string) => void;
-}
-
-export function StepExecutor({
-  stepId,
-  customerId,
-  type,
-  command,
-  context,
-  onExecutionComplete
-}: StepExecutorProps) {
-  const [isExecuting, setIsExecuting] = useState(false);
-  const [output, setOutput] = useState<string>('');
-  const [exitCode, setExitCode] = useState<number | null>(null);
-  const [agentStatus, setAgentStatus] = useState({ available: false, connected: false });
-  const { toast } = useToast();
-  
-  useEffect(() => {
-    if (!agentBridge) return;
+export class ScriptExecutor {
+  async execute(request: ExecutionRequest): Promise<ExecutionResponse> {
+    const { script, context } = request;
+    const startTime = Date.now();
     
-    const unsubscribe = agentBridge.onStatusChange((status) => {
-      setAgentStatus({
-        available: status.available,
-        connected: status.connected
+    // 1. Find target pod
+    const podName = await this.findPod(
+      context.namespace,
+      context.podSelector
+    );
+    
+    // 2. Prepare script execution
+    const { command, args } = this.buildScriptCommand(script!);
+    
+    // 3. Build kubectl exec with stdin for script
+    const kubectlArgs = [
+      'exec',
+      '-n', context.namespace,
+      podName,
+      ...(context.containerName ? ['-c', context.containerName] : []),
+      '-i', // Interactive mode for stdin
+      '--', command, ...args
+    ];
+    
+    // 4. Execute with script content via stdin
+    const { stdout, stderr, exitCode } = await this.execKubectlWithStdin(
+      kubectlArgs,
+      script!.content
+    );
+    
+    return {
+      success: exitCode === 0,
+      executionId: request.id,
+      type: 'script',
+      exitCode,
+      duration: Date.now() - startTime,
+      timestamp: new Date().toISOString(),
+      script: {
+        stdout,
+        stderr,
+        exitCode,
+        command: `${command} ${args.join(' ')}`
+      }
+    };
+  }
+  
+  private buildScriptCommand(script: ScriptExecutionConfig): {
+    command: string;
+    args: string[];
+  } {
+    const { interpreter } = script;
+    
+    switch (interpreter) {
+      case 'bash':
+        return { command: 'bash', args: [] };
+      case 'python':
+        return { command: 'python', args: [] };
+      case 'node':
+        return { command: 'node', args: [] };
+      default:
+        throw new Error(`Unsupported interpreter: ${interpreter}`);
+    }
+  }
+  
+  private async execKubectlWithStdin(
+    args: string[],
+    stdin: string
+  ): Promise<{
+    stdout: string;
+    stderr: string;
+    exitCode: number;
+  }> {
+    return new Promise((resolve) => {
+      const child = spawn('kubectl', args);
+      let stdout = '';
+      let stderr = '';
+      
+      child.stdout.on('data', (data) => stdout += data.toString());
+      child.stderr.on('data', (data) => stderr += data.toString());
+      
+      // Send script content via stdin
+      child.stdin.write(stdin);
+      child.stdin.end();
+      
+      child.on('close', (exitCode) => {
+        resolve({ stdout, stderr, exitCode: exitCode || 0 });
       });
     });
-    
-    return unsubscribe;
-  }, []);
+  }
   
-  const handleExecute = useCallback(async () => {
-    if (!agentBridge) return;
-    
-    setIsExecuting(true);
-    setOutput('');
-    setExitCode(null);
-    
-    const request = {
-      id: `${stepId}-${Date.now()}`,
-      type,
-      command,
+  // ... findPod same as SQLExecutor
+}
+```
+
+---
+
+## 5. Web App Integration
+
+### 5.1 Step Type Rendering
+
+```tsx
+// src/components/steps/step-executor.tsx
+
+interface StepExecutorProps {
+  step: CustomerStep;
+  config: CustomerExecutionConfig;
+}
+
+export function StepExecutor({ step, config }: StepExecutorProps) {
+  switch (step.type) {
+    case 'sql':
+      return <SQLStepExecutor step={step} config={config.sql} />;
+    case 'rest':
+      return <RESTStepExecutor step={step} config={config.rest} />;
+    case 'script':
+      return <ScriptStepExecutor step={step} config={config.script} />;
+    case 'text':
+      return <TextStepDisplay step={step} />;
+    default:
+      return <UnknownStepType step={step} />;
+  }
+}
+
+// SQL Step
+function SQLStepExecutor({ step, config }: { step: CustomerStep; config?: SQLConfig }) {
+  if (!config) return <MissingConfig type="sql" />;
+  
+  const handleExecute = async () => {
+    const result = await window.rtAgent!.execute({
+      type: 'sql',
       context: {
-        ...context,
-        customerId,
-        stepId
+        namespace: config.namespace,
+        podSelector: config.podSelector,
+        containerName: config.containerName
+      },
+      sql: {
+        client: config.sqlClient,
+        database: config.database,
+        query: step.content,
+        useTransaction: step.metadata?.useTransaction
       }
-    };
-    
-    let fullOutput = '';
-    
-    try {
-      await agentBridge.execute(request, (update: ExecutionUpdate) => {
-        switch (update.type) {
-          case 'stdout':
-          case 'stderr':
-            fullOutput += update.data;
-            setOutput(prev => prev + update.data);
-            break;
-            
-          case 'complete':
-            setExitCode(update.exitCode ?? null);
-            onExecutionComplete?.(update.exitCode === 0, fullOutput);
-            
-            if (update.exitCode === 0) {
-              toast({
-                title: 'Execution completed',
-                description: `Duration: ${update.duration}ms`
-              });
-            } else {
-              toast({
-                title: 'Execution failed',
-                description: `Exit code: ${update.exitCode}`,
-                variant: 'destructive'
-              });
-            }
-            break;
-            
-          case 'error':
-            toast({
-              title: 'Execution error',
-              description: update.error,
-              variant: 'destructive'
-            });
-            break;
-            
-          case 'timeout':
-            toast({
-              title: 'Execution timeout',
-              description: 'Command exceeded maximum duration',
-              variant: 'destructive'
-            });
-            break;
-        }
-      });
-    } catch (err) {
-      toast({
-        title: 'Failed to execute',
-        description: err instanceof Error ? err.message : 'Unknown error',
-        variant: 'destructive'
-      });
-    } finally {
-      setIsExecuting(false);
-    }
-  }, [stepId, customerId, type, command, context, onExecutionComplete, toast]);
-  
-  // Render different UI based on agent status
-  if (!agentStatus.available) {
-    return (
-      <div className="rounded-md bg-muted p-4">
-        <p className="text-sm text-muted-foreground">
-          Install the browser extension to enable one-click execution.
-        </p>
-        <Button variant="outline" size="sm" className="mt-2" asChild>
-          <a href="/settings/agent">Install Extension</a>
-        </Button>
-      </div>
-    );
-  }
-  
-  if (!agentStatus.connected) {
-    return (
-      <div className="rounded-md bg-yellow-50 p-4">
-        <p className="text-sm text-yellow-800">
-          Local agent is offline. Start it with: docker-compose up agent
-        </p>
-      </div>
-    );
-  }
+    });
+    return result;
+  };
   
   return (
-    <div className="space-y-4">
-      <div className="flex items-center gap-2">
-        <Button 
-          onClick={handleExecute} 
-          disabled={isExecuting}
-          className="bg-green-600 hover:bg-green-700"
-        >
-          {isExecuting ? (
-            <>
-              <Spinner className="mr-2 h-4 w-4" />
-              Executing...
-            </>
-          ) : (
-            <>
-              <Play className="mr-2 h-4 w-4" />
-              Execute
-            </>
-          )}
-        </Button>
-        
-        {exitCode !== null && (
-          <Badge variant={exitCode === 0 ? 'default' : 'destructive'}>
-            Exit Code: {exitCode}
-          </Badge>
-        )}
-      </div>
-      
-      {(output || isExecuting) && (
-        <Terminal 
-          output={output} 
-          isStreaming={isExecuting}
-          className="h-64"
-        />
+    <div>
+      <Badge variant="outline">SQL ({config.sqlClient})</Badge>
+      <CodeBlock code={step.content} language="sql" />
+      <ExecuteButton onExecute={handleExecute} />
+    </div>
+  );
+}
+
+// REST Step
+function RESTStepExecutor({ step, config }: { step: CustomerStep; config?: RESTConfig }) {
+  if (!config) return <MissingConfig type="rest" />;
+  
+  const method = step.metadata?.method || 'POST';
+  const url = step.metadata?.url || '/';
+  const payload = step.metadata?.payload;
+  
+  const handleExecute = async () => {
+    const result = await window.rtAgent!.execute({
+      type: 'rest',
+      context: {
+        namespace: config.namespace,
+        podSelector: config.podSelector
+      },
+      rest: {
+        method,
+        url,
+        baseUrl: config.baseUrl,
+        payload,
+        headers: step.metadata?.headers,
+        expectJson: true
+      }
+    });
+    return result;
+  };
+  
+  return (
+    <div>
+      <Badge variant="outline">REST {method}</Badge>
+      <div className="text-sm font-mono">{url}</div>
+      {payload && <CodeBlock code={JSON.stringify(payload, null, 2)} language="json" />}
+      <ExecuteButton onExecute={handleExecute} />
+    </div>
+  );
+}
+
+// Script Step
+function ScriptStepExecutor({ step, config }: { step: CustomerStep; config?: ScriptConfig }) {
+  if (!config) return <MissingConfig type="script" />;
+  
+  const interpreter = step.metadata?.interpreter || 'bash';
+  
+  const handleExecute = async () => {
+    const result = await window.rtAgent!.execute({
+      type: 'script',
+      context: {
+        namespace: config.namespace,
+        podSelector: config.podSelector,
+        containerName: config.containerName
+      },
+      script: {
+        interpreter,
+        content: step.content,
+        environment: step.metadata?.environment,
+        workingDir: config.workingDir
+      }
+    });
+    return result;
+  };
+  
+  return (
+    <div>
+      <Badge variant="outline">Script ({interpreter})</Badge>
+      <CodeBlock code={step.content} language={interpreter} />
+      <ExecuteButton onExecute={handleExecute} />
+    </div>
+  );
+}
+
+// Text Step (manual, no execution)
+function TextStepDisplay({ step }: { step: CustomerStep }) {
+  return (
+    <div>
+      <Badge variant="outline">Manual</Badge>
+      <div className="prose">{step.content}</div>
+      {step.metadata?.checklist && (
+        <Checklist items={step.metadata.checklist} />
       )}
+      <Button onClick={() => markStepDone(step.id)}>Mark as Done</Button>
     </div>
   );
 }
 ```
 
-### 4.3 Terminal Component
-
-```typescript
-// src/components/ui/terminal.tsx
-
-import { useRef, useEffect } from 'react';
-import { cn } from '@/lib/utils';
-import AnsiToHtml from 'ansi-to-html';
-
-interface TerminalProps {
-  output: string;
-  isStreaming?: boolean;
-  className?: string;
-}
-
-const ansiConverter = new AnsiToHtml({
-  newline: true,
-  escapeXML: true,
-  fg: '#e4e4e4',
-  bg: '#1e1e1e'
-});
-
-export function Terminal({ output, isStreaming, className }: TerminalProps) {
-  const scrollRef = useRef<HTMLDivElement>(null);
-  
-  // Auto-scroll to bottom
-  useEffect(() => {
-    if (scrollRef.current && isStreaming) {
-      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
-    }
-  }, [output, isStreaming]);
-  
-  const html = ansiConverter.toHtml(output);
-  
-  return (
-    <div 
-      ref={scrollRef}
-      className={cn(
-        'rounded-md bg-[#1e1e1e] p-4 font-mono text-sm overflow-auto',
-        className
-      )}
-    >
-      <pre 
-        className="text-[#e4e4e4] whitespace-pre-wrap break-all"
-        dangerouslySetInnerHTML={{ __html: html }}
-      />
-      {isStreaming && (
-        <span className="inline-block w-2 h-4 bg-[#e4e4e4] ml-1 animate-pulse" />
-      )}
-    </div>
-  );
-}
-```
-
-### 4.4 Database Schema Updates
+### 5.2 Database Schema Updates
 
 ```typescript
 // src/lib/db/schema.ts (additions)
 
-import { sqliteTable, integer, text, index } from 'drizzle-orm/sqlite-core';
-
-// ==================== Agent Tokens ====================
-export const agentTokens = sqliteTable('agent_tokens', {
+// ==================== Customer Execution Config ====================
+export const customerExecutionConfigs = sqliteTable('customer_execution_configs', {
   id: integer('id').primaryKey({ autoIncrement: true }),
-  token: text('token').notNull().unique(),
-  userId: integer('user_id'), // For future multi-user
-  name: text('name'), // e.g., "Work Laptop"
-  lastUsedAt: integer('last_used_at', { mode: 'timestamp' }),
-  expiresAt: integer('expires_at', { mode: 'timestamp' }),
+  customerId: integer('customer_id').notNull().references(() => customers.id, { onDelete: 'cascade' }),
+  
+  // SQL config (JSON)
+  sqlConfig: text('sql_config', { mode: 'json' }).$type<{
+    namespace: string;
+    podSelector: string;
+    containerName?: string;
+    sqlClient: 'psql' | 'mysql' | 'mongosh' | 'redis-cli';
+    connectionEnvVar: string;
+  }>(),
+  
+  // REST config (JSON)
+  restConfig: text('rest_config', { mode: 'json' }).$type<{
+    namespace: string;
+    podSelector: string;
+    containerName?: string;
+    baseUrl?: string;
+  }>(),
+  
+  // Script config (JSON)
+  scriptConfig: text('script_config', { mode: 'json' }).$type<{
+    namespace: string;
+    podSelector: string;
+    containerName?: string;
+    workingDir?: string;
+  }>(),
+  
   isActive: integer('is_active', { mode: 'boolean' }).default(true),
   createdAt: integer('created_at', { mode: 'timestamp' }).$defaultFn(() => new Date()),
+  updatedAt: integer('updated_at', { mode: 'timestamp' }).$defaultFn(() => new Date()),
 });
 
-// ==================== Step Executions ====================
+// ==================== Step Executions (Extended) ====================
 export const stepExecutions = sqliteTable('step_executions', {
   id: integer('id').primaryKey({ autoIncrement: true }),
   stepId: integer('step_id').notNull().references(() => customerSteps.id, { onDelete: 'cascade' }),
@@ -1317,437 +940,239 @@ export const stepExecutions = sqliteTable('step_executions', {
   releaseId: integer('release_id').notNull().references(() => releases.id),
   
   // Execution details
+  type: text('type', { enum: ['sql', 'rest', 'script', 'text'] }).notNull(),
   status: text('status', { enum: ['running', 'completed', 'failed', 'cancelled', 'timeout'] }).notNull(),
-  command: text('command').notNull(),
+  
+  // Request details (stored for audit)
+  request: text('request', { mode: 'json' }).notNull(),
+  
+  // Result
+  exitCode: integer('exit_code'),
   stdout: text('stdout'),
   stderr: text('stderr'),
-  exitCode: integer('exit_code'),
+  
+  // Type-specific results
+  sqlResult: text('sql_result', { mode: 'json' }), // { rowCount, rows }
+  restResult: text('rest_result', { mode: 'json' }), // { statusCode, body }
+  scriptResult: text('script_result', { mode: 'json' }), // { command }
   
   // Metadata
   startedAt: integer('started_at', { mode: 'timestamp' }).notNull(),
   completedAt: integer('completed_at', { mode: 'timestamp' }),
-  duration: integer('duration'), // milliseconds
-  executedBy: text('executed_by'), // For future multi-user
-  
-  // Error info
-  errorMessage: text('error_message'),
+  duration: integer('duration'),
   
   createdAt: integer('created_at', { mode: 'timestamp' }).$defaultFn(() => new Date()),
-}, (table) => ({
-  stepIdx: index('step_executions_step_idx').on(table.stepId),
-  statusIdx: index('step_executions_status_idx').on(table.status),
-  createdIdx: index('step_executions_created_idx').on(table.createdAt),
-}));
-
-// ==================== Customer SQL Executor Config ====================
-export const customerSqlConfig = sqliteTable('customer_sql_config', {
-  id: integer('id').primaryKey({ autoIncrement: true }),
-  customerId: integer('customer_id').notNull().references(() => customers.id, { onDelete: 'cascade' }),
-  
-  // Pod selection
-  namespace: text('namespace').notNull(),
-  podSelector: text('pod_selector').notNull(), // label selector, e.g., "app=db-client"
-  containerName: text('container_name'), // optional
-  
-  // SQL client type
-  sqlClient: text('sql_client', { enum: ['psql', 'mysql', 'mongosh', 'redis-cli'] }).notNull(),
-  
-  // Environment variable name for connection string in the pod
-  connectionEnvVar: text('connection_env_var').default('DATABASE_URL'),
-  
-  isActive: integer('is_active', { mode: 'boolean' }).default(true),
-  createdAt: integer('created_at', { mode: 'timestamp' }).$defaultFn(() => new Date()),
-  updatedAt: integer('updated_at', { mode: 'timestamp' }).$defaultFn(() => new Date()),
-}, (table) => ({
-  uniqueCustomer: index('unique_customer_sql_config').on(table.customerId),
-}));
+});
 ```
 
 ---
 
-## 5. Security Architecture
+## 6. Q&A / Clarifications
 
-### 5.1 Threat Model
+### Q1: How does the agent handle different SQL dialects?
 
-| Threat | Mitigation |
-|--------|------------|
-| Malicious website calls agent | Extension validates origin, token required |
-| Token theft | Token stored in extension storage, not accessible to web pages |
-| Command injection | Input validation, whitelist patterns, parameterized commands |
-| Privilege escalation | Agent runs in Docker with limited volume mounts |
-| Network sniffing | Token in header, use HTTPS if agent exposed (not recommended) |
-| Log exposure | Execution logs stored encrypted in database |
+**A:** The agent delegates to the SQL client installed in the target pod:
+- **PostgreSQL**: Uses `psql` with `-c` flag for single commands
+- **MySQL**: Uses `mysql` with `-e` flag
+- **MongoDB**: Uses `mongosh` with `--eval` flag
+- **Redis**: Uses `redis-cli` directly
 
-### 5.2 Command Whitelist Configuration
+The agent builds the appropriate command string but the actual execution happens in the pod using the pod's configured client version.
 
-```typescript
-// agent/src/config.ts
+### Q2: What happens if the pod has multiple containers?
 
-export const config = {
-  port: process.env.AGENT_PORT || 3456,
-  token: process.env.AGENT_TOKEN!,
-  logLevel: process.env.LOG_LEVEL || 'info',
-  defaultTimeout: parseInt(process.env.DEFAULT_TIMEOUT || '300'),
-  maxConcurrentExecutions: parseInt(process.env.MAX_CONCURRENT_EXECUTIONS || '5'),
-  
-  // Command whitelist patterns (regex)
-  commandWhitelist: [
-    // kubectl commands
-    /^kubectl\s+(apply|get|describe|logs|exec|port-forward|rollout)/,
-    
-    // Helm commands
-    /^helm\s+(install|upgrade|rollback|list|status)/,
-    
-    // SQL via kubectl exec (specific pattern)
-    /^kubectl\s+exec\s+-n\s+\S+\s+\S+\s+--\s+(psql|mysql|mongosh|redis-cli)/,
-    
-    // Docker commands
-    /^docker\s+(build|push|pull|images|ps)/,
-    
-    // Git commands
-    /^git\s+(clone|pull|fetch|status)/,
-    
-    // Bash scripts in specific directories
-    /^bash\s+-c\s+".\/scripts\//,
-  ],
-  
-  // Blocked patterns (always rejected)
-  blockedPatterns: [
-    /rm\s+-rf\s+\//,
-    />\s*\/etc\/passwd/,
-    /curl\s+.*\|\s*bash/,
-  ]
-};
+**A:** The `containerName` field in the execution config specifies which container to exec into. If not specified:
+1. kubectl defaults to the first container in the pod
+2. If that container doesn't have the required tool (psql, curl, bash), execution fails
+3. Error message suggests checking container configuration
+
+### Q3: How are large SQL results handled?
+
+**A:** 
+- Results are streamed but buffered in memory
+- Hard limit: 10MB total output
+- Row limit: 1000 rows for display
+- For large migrations, recommend using `script` type instead
+- Full output is always available in execution logs
+
+### Q4: Can REST calls use HTTPS with self-signed certificates?
+
+**A:** Yes, by adding curl flags:
+```bash
+curl -k https://internal-service/...
 ```
 
-### 5.3 RBAC for Agent
-
-The agent's kubeconfig should have minimal permissions:
-
-```yaml
-# kubernetes/agent-rbac.yaml
-apiVersion: v1
-kind: ServiceAccount
-metadata:
-  name: release-tracker-agent
-  namespace: default
----
-apiVersion: rbac.authorization.k8s.io/v1
-kind: ClusterRole
-metadata:
-  name: release-tracker-agent
-rules:
-  # Read pods (for finding db-client pods)
-  - apiGroups: [""]
-    resources: ["pods"]
-    verbs: ["get", "list", "watch"]
-  # Exec into pods
-  - apiGroups: [""]
-    resources: ["pods/exec"]
-    verbs: ["create"]
-  # Read deployments (for rollout status)
-  - apiGroups: ["apps"]
-    resources: ["deployments", "statefulsets"]
-    verbs: ["get", "list", "watch"]
-  # Apply changes (limited to specific namespaces via binding)
-  - apiGroups: ["*"]
-    resources: ["*"]
-    verbs: ["get", "list", "apply", "patch"]
----
-apiVersion: rbac.authorization.k8s.io/v1
-kind: ClusterRoleBinding
-metadata:
-  name: release-tracker-agent
-roleRef:
-  apiGroup: rbac.authorization.k8s.io
-  kind: ClusterRole
-  name: release-tracker-agent
-subjects:
-  - kind: ServiceAccount
-    name: release-tracker-agent
-    namespace: default
-```
-
----
-
-## 6. API Reference
-
-### 6.1 Agent REST API
-
-#### Health Check
-```
-GET /health
-Headers: X-Agent-Token: <token>
-
-Response:
+Configure in step metadata:
+```json
 {
-  "status": "healthy",
-  "version": "1.0.0",
-  "uptime": 3600,
-  "executions": {
-    "active": 2,
-    "completed": 150
-  }
+  "headers": {},
+  "curlOptions": ["-k", "--max-time", "30"]
 }
 ```
 
-#### Execute Command
-```
-POST /api/v1/execute
-Headers: 
-  X-Agent-Token: <token>
-  Content-Type: application/json
+### Q5: How are script secrets handled?
 
-Body:
-{
-  "id": "exec-123",
-  "type": "sql",
-  "command": "ALTER TABLE users ADD COLUMN...",
-  "context": {
-    "namespace": "customer-a-prod",
-    "podSelector": "app=db-client",
-    "customerId": 1,
-    "stepId": 42
-  },
-  "timeout": 300
-}
+**A:** Secrets should NOT be passed from the web app. Instead:
+1. Mount secrets as environment variables in the target pod
+2. Script references them: `$SECRET_API_KEY`
+3. Agent never sees the secret values
+4. Script content is logged but env vars are not
 
-Response (streaming via WebSocket) or:
-{
-  "success": true,
-  "exitCode": 0,
-  "stdout": "ALTER TABLE\nTime: 45.234 ms",
-  "stderr": "",
-  "duration": 2340
-}
-```
+### Q6: Can scripts be stored and reused?
 
-#### Cancel Execution
-```
-POST /api/v1/execute/:id/cancel
-Headers: X-Agent-Token: <token>
+**A:** Initial implementation: inline scripts only.
+Future enhancement: Script Library feature:
+- Store scripts in database with versioning
+- Reference by ID: `scriptRef: "cleanup-v2"`
+- Parameters via templating: `{{ customerId }}`
 
-Response:
-{
-  "success": true,
-  "message": "Execution cancelled"
-}
-```
+### Q7: What happens if kubectl is not available on the agent?
 
-### 6.2 WebSocket Protocol
-
+**A:** Agent checks for kubectl on startup:
 ```javascript
-// Connect
-const ws = new WebSocket('ws://localhost:3456/ws');
-ws.onopen = () => {
-  // Authenticate
-  ws.send(JSON.stringify({
-    type: 'auth',
-    token: 'rt_live_xxx'
-  }));
-};
-
-// Execute
-ws.send(JSON.stringify({
-  type: 'execute',
-  request: {
-    id: 'exec-123',
-    type: 'sql',
-    command: 'SELECT * FROM users',
-    context: { namespace: 'cust-a', podSelector: 'app=db-client' }
-  }
-}));
-
-// Receive updates
-ws.onmessage = (event) => {
-  const msg = JSON.parse(event.data);
-  switch (msg.type) {
-    case 'stdout': console.log(msg.data); break;
-    case 'stderr': console.error(msg.data); break;
-    case 'complete': console.log('Done:', msg.exitCode); break;
-    case 'error': console.error('Error:', msg.error); break;
-  }
-};
+const checkKubectl = spawn('kubectl', ['version', '--client']);
 ```
 
----
+If missing:
+- Logs error: "kubectl not found, mounting kubeconfig not sufficient"
+- Health endpoint returns: `{ status: "error", reason: "kubectl not found" }`
+- All executions fail with clear error message
 
-## 7. Development Workflow
+### Q8: How do we handle connection drops during long executions?
 
-### 7.1 Local Development Setup
+**A:** 
+- The kubectl exec process continues running in the cluster
+- Agent tracks execution ID to pod process mapping
+- On reconnect, agent can query status (if process still running)
+- Web app shows "Connection lost, execution may still be running"
+- User can check execution history for final status
 
+### Q9: Can the agent execute on multiple pods simultaneously?
+
+**A:** Yes, each execution is independent:
+- Concurrent execution limit configurable (default: 5)
+- Each execution gets unique ID
+- No locking between executions
+- Use with caution for database migrations (recommend sequential)
+
+### Q10: How do we debug failed executions?
+
+**A:** Multiple levels of debugging:
+1. **Web App**: Shows stdout/stderr in terminal panel
+2. **Agent Logs**: Full kubectl command and output
+3. **K8s Logs**: Check target pod logs if execution started
+4. **Manual Test**: Copy kubectl command from logs, run locally
+
+Enable debug logging:
 ```bash
-# 1. Start the web app
-npm run dev
-
-# 2. Build and load extension (in another terminal)
-cd extension
-npm install
-npm run build
-# Load unpacked extension in chrome://extensions
-
-# 3. Start the agent (in another terminal)
-cd agent
-npm install
-npm run dev
-# Or use Docker:
-docker-compose up agent
+LOG_LEVEL=debug node server.js
 ```
 
-### 7.2 Extension Development
+### Q11: What's the recommended pod setup for executions?
 
+**A:** Recommended pattern:
+```yaml
+# db-client pod for SQL
+apiVersion: v1
+kind: Pod
+metadata:
+  name: db-client
+  labels:
+    app: db-client
+spec:
+  containers:
+  - name: client
+    image: postgres:15-alpine  # Has psql
+    env:
+    - name: DATABASE_URL
+      valueFrom:
+        secretKeyRef:
+          name: db-credentials
+          key: url
+    command: ['sleep', 'infinity']  # Keep pod running
+```
+
+Similar for api-client (with curl) and executor (with bash/python).
+
+### Q12: How do we handle different environments (dev/staging/prod)?
+
+**A:** Two approaches:
+
+**Option 1: Separate agents**
 ```bash
-cd extension
+# Dev agent on port 3456
+AGENT_PORT=3456 AGENT_TOKEN=dev-token node server.js
 
-# Development mode with hot reload
-npm run dev
-
-# Build for production
-npm run build
-
-# Package for Chrome Web Store
-npm run package
+# Prod agent on port 3457
+AGENT_PORT=3457 AGENT_TOKEN=prod-token node server.js
 ```
+Configure extension per environment.
 
-### 7.3 Agent Development
+**Option 2: Single agent, cluster context**
+Agent uses current kubectl context. User switches context before execution.
 
-```bash
-cd agent
+### Q13: Can we execute on pods in different clusters?
 
-# Development with hot reload
-npm run dev
+**A:** Yes, if:
+1. kubeconfig has multiple contexts
+2. Agent has access to all clusters
+3. Execution request includes cluster context
+4. Agent switches context: `kubectl --context=<ctx> exec ...`
 
-# Build
-npm run build
-
-# Run tests
-npm test
-
-# Build Docker image
-docker build -t release-tracker-agent .
-```
+Not in initial implementation - single cluster per agent.
 
 ---
 
-## 8. Deployment Checklist
+## 7. Security Considerations
 
-### 8.1 Chrome Web Store Publishing
+### 7.1 Command Injection Prevention
 
-- [ ] Create Chrome Web Store developer account
-- [ ] Prepare extension icons (16x16, 48x48, 128x128)
-- [ ] Write extension description and screenshots
-- [ ] Build and zip extension package
-- [ ] Submit for review (typically 1-3 days)
+| Layer | Protection |
+|-------|------------|
+| Web App | Input validation, parameterized queries |
+| Extension | No command building, just relay |
+| Agent | Strict type checking, whitelist validation |
+| kubectl | Kubernetes RBAC on pod exec |
 
-### 8.2 Agent Deployment
+### 7.2 Network Security
 
-- [ ] Generate secure random token
-- [ ] Configure command whitelist
-- [ ] Set up log rotation
-- [ ] Configure monitoring/alerting
-- [ ] Document kubeconfig RBAC requirements
+- Agent only binds to `127.0.0.1` (localhost)
+- No external exposure possible
+- Extension validates token on every request
+- HTTPS for web app, HTTP only for local agent
 
-### 8.3 Web App Updates
+### 7.3 Pod Security
 
-- [ ] Add agent settings page
-- [ ] Update step detail UI with execution panel
-- [ ] Add execution history view
-- [ ] Update documentation
-
----
-
-## 9. Monitoring & Observability
-
-### 9.1 Agent Metrics
-
-| Metric | Type | Description |
-|--------|------|-------------|
-| executions_total | Counter | Total executions by type |
-| executions_active | Gauge | Currently running executions |
-| execution_duration | Histogram | Execution duration in seconds |
-| execution_errors | Counter | Failed executions by error type |
-| ws_connections | Gauge | Active WebSocket connections |
-
-### 9.2 Logging
-
-```typescript
-// Structured logging format
-{
-  "timestamp": "2026-02-28T13:45:00Z",
-  "level": "info",
-  "component": "execution-manager",
-  "executionId": "exec-123",
-  "type": "sql",
-  "customerId": 1,
-  "stepId": 42,
-  "message": "Execution started",
-  "metadata": {
-    "namespace": "customer-a-prod",
-    "pod": "db-client-xxx"
-  }
-}
-```
+- Pods run with minimal permissions
+- Service accounts have limited RBAC
+- No privileged containers recommended
+- Network policies restrict pod-to-pod access
 
 ---
 
-## 10. Appendix
+## 8. Performance Considerations
 
-### 10.1 Glossary
+| Metric | Target | Notes |
+|--------|--------|-------|
+| Execution start latency | < 2s | Pod lookup + kubectl exec |
+| Stream latency | < 100ms | Real-time output streaming |
+| Concurrent executions | 5-10 | Configurable limit |
+| Output size limit | 10MB | Per execution |
+| Row limit (SQL) | 1000 | Display only |
+| Connection timeout | 30s | For status checks |
+| Execution timeout | 300-600s | Configurable per type |
 
-| Term | Definition |
-|------|------------|
-| Agent | Local Docker container that executes commands |
-| Bridge | Browser extension that connects web app to agent |
-| Content Script | JavaScript injected into web pages by extension |
-| Service Worker | Background script handling extension events |
-| Pod Selector | Kubernetes label selector for finding pods |
-| db-client | Pod in K8s cluster with database client tools |
+---
 
-### 10.2 File Structure
+## 9. Error Codes
 
-```
-docs/
-├── FSD-AGENT-EXECUTION.md       # This document
-└── TSD-AGENT-EXECUTION.md       # Technical specification
-
-extension/                       # Browser extension
-├── manifest.json
-├── src/
-│   ├── content.ts              # Content script
-│   ├── background.ts           # Service worker
-│   ├── injected.ts             # Page API
-│   └── popup.ts                # Settings UI
-├── popup.html
-├── package.json
-└── tsconfig.json
-
-agent/                          # Local execution agent
-├── src/
-│   ├── server.ts               # Express server
-│   ├── config.ts               # Configuration
-│   ├── middleware/
-│   │   └── auth.ts             # Token validation
-│   ├── routes/
-│   │   ├── execution.ts        # Execute endpoints
-│   │   └── status.ts           # Health endpoint
-│   ├── services/
-│   │   ├── execution-manager.ts
-│   │   └── sql-executor.ts
-│   └── utils/
-│       └── logger.ts
-├── Dockerfile
-├── docker-compose.yml
-├── package.json
-└── tsconfig.json
-
-web-app-changes/                # Modifications to main app
-├── src/
-│   ├── lib/
-│   │   └── services/
-│   │       └── agent-bridge.ts
-│   └── components/
-│       ├── ui/
-│       │   └── terminal.tsx
-│       └── steps/
-│           └── step-executor.tsx
-```
+| Code | Description | Recovery |
+|------|-------------|----------|
+| `POD_NOT_FOUND` | No pod matches selector | Check customer config |
+| `POD_NOT_READY` | Pod exists but not running | Wait or check pod status |
+| `EXEC_TIMEOUT` | Execution exceeded timeout | Increase timeout or optimize |
+| `SQL_ERROR` | Database returned error | Check SQL syntax |
+| `HTTP_ERROR` | REST call returned 4xx/5xx | Check API docs |
+| `SCRIPT_ERROR` | Script exited non-zero | Check script logic |
+| `KUBECTL_ERROR` | kubectl command failed | Check kubeconfig |
+| `NETWORK_ERROR` | Agent can't reach cluster | Check VPN/network |
