@@ -14,6 +14,12 @@ interface ReleaseMatrixClientProps {
   releaseId: number;
 }
 
+function getDeployStatus(customerSteps: any[]): { done: number; total: number } {
+  const deploySteps = customerSteps.filter((s: any) => s.category === 'deploy');
+  const done = deploySteps.filter((s: any) => s.status === 'done' || s.status === 'skipped').length;
+  return { done, total: deploySteps.length };
+}
+
 const statusIcons = {
   pending: <Circle className="w-5 h-5 text-slate-300" />,
   done: <CheckCircle className="w-5 h-5 text-green-500" />,
@@ -155,6 +161,22 @@ export function ReleaseMatrixClient({ stepsByCluster, category, releaseId }: Rel
                           <th key={customer.customer.id} className="text-center py-2 px-3 font-medium text-slate-500 min-w-[140px]">
                             <div>{customer.customer.name}</div>
                             <div className="text-xs text-slate-400 font-normal">{customer.customer.namespace}</div>
+                            {category === 'verify' && (() => {
+                              const { done, total } = getDeployStatus(customer.steps);
+                              const isFullyDeployed = total > 0 && done === total;
+                              const isPartial = total > 0 && done > 0 && done < total;
+                              return total > 0 ? (
+                                <div className={`mt-1 text-xs font-medium px-2 py-0.5 rounded-full inline-block ${
+                                  isFullyDeployed
+                                    ? 'bg-green-100 text-green-700'
+                                    : isPartial
+                                    ? 'bg-amber-100 text-amber-700'
+                                    : 'bg-slate-100 text-slate-500'
+                                }`}>
+                                  {isFullyDeployed ? '✓ Deployed' : `${done}/${total} deployed`}
+                                </div>
+                              ) : null;
+                            })()}
                             <div className="mt-2">
                               <AddCustomStepDialog
                                 releaseId={releaseId}

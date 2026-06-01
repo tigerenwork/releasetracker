@@ -4,7 +4,6 @@ import { ArrowLeft, Edit } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Separator } from '@/components/ui/separator';
 import { getReleaseById } from '@/lib/actions/releases';
 import { getReleaseStepsGroupedByCluster, getStepStats } from '@/lib/actions/customer-steps';
@@ -15,9 +14,6 @@ import { ReleaseActions } from '@/components/releases/release-actions';
 interface ReleaseDetailPageProps {
   params: Promise<{
     id: string;
-  }>;
-  searchParams: Promise<{
-    tab?: string;
   }>;
 }
 
@@ -43,12 +39,10 @@ function getStatusColor(status: string) {
 
 export const dynamic = 'force-dynamic';
 
-export default async function ReleaseDetailPage({ params, searchParams }: ReleaseDetailPageProps) {
+export default async function ReleaseDetailPage({ params }: ReleaseDetailPageProps) {
   const { id } = await params;
-  const { tab } = await searchParams;
   const releaseId = parseInt(id);
   const release = await getReleaseById(releaseId);
-  const activeTab = tab === 'verify' ? 'verify' : 'deploy';
 
   if (!release) {
     notFound();
@@ -191,36 +185,30 @@ export default async function ReleaseDetailPage({ params, searchParams }: Releas
 
       {/* Matrix View (for active) */}
       {release.status === 'active' && (
-        <Tabs defaultValue={activeTab}>
-          <TabsList>
-            <TabsTrigger value="deploy" asChild>
-              <Link href={`/releases/${releaseId}?tab=deploy`}>
-                Deploy ({stats.done + stats.skipped}/{stats.total})
-              </Link>
-            </TabsTrigger>
-            <TabsTrigger value="verify" asChild>
-              <Link href={`/releases/${releaseId}?tab=verify`}>
-                Verify 
-              </Link>
-            </TabsTrigger>
-          </TabsList>
-
-          <TabsContent value="deploy" className="mt-4">
+        <div className="space-y-8">
+          <div>
+            <h2 className="text-lg font-semibold text-slate-800 mb-3">
+              Deploy Steps
+              <span className="ml-2 text-sm font-normal text-slate-500">
+                ({stats.done + stats.skipped}/{stats.total})
+              </span>
+            </h2>
             <ReleaseMatrixClient 
               stepsByCluster={stepsByCluster} 
               category="deploy"
               releaseId={releaseId}
             />
-          </TabsContent>
+          </div>
 
-          <TabsContent value="verify" className="mt-4">
+          <div>
+            <h2 className="text-lg font-semibold text-slate-800 mb-3">Verify Steps</h2>
             <ReleaseMatrixClient 
               stepsByCluster={stepsByCluster} 
               category="verify"
               releaseId={releaseId}
             />
-          </TabsContent>
-        </Tabs>
+          </div>
+        </div>
       )}
     </div>
   );
