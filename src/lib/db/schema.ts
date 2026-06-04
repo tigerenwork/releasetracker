@@ -1,4 +1,4 @@
-import { sqliteTable, integer, text, uniqueIndex } from 'drizzle-orm/sqlite-core';
+import { sqliteTable, integer, text, uniqueIndex, primaryKey } from 'drizzle-orm/sqlite-core';
 import { relations } from 'drizzle-orm';
 
 // ==================== Clusters ====================
@@ -55,6 +55,7 @@ export const releases = sqliteTable('releases', {
 export const releasesRelations = relations(releases, ({ many }) => ({
   templates: many(stepTemplates),
   customerSteps: many(customerSteps),
+  enrolledCustomers: many(releaseCustomers),
 }));
 
 // ==================== Step Templates ====================
@@ -117,6 +118,20 @@ export const customerStepsRelations = relations(customerSteps, ({ one }) => ({
   template: one(stepTemplates, { fields: [customerSteps.templateId], references: [stepTemplates.id] }),
 }));
 
+// ==================== Release Customers (enrollment) ====================
+export const releaseCustomers = sqliteTable('release_customers', {
+  releaseId: integer('release_id').notNull().references(() => releases.id, { onDelete: 'cascade' }),
+  customerId: integer('customer_id').notNull().references(() => customers.id, { onDelete: 'cascade' }),
+  enrolledAt: integer('enrolled_at', { mode: 'timestamp' }).$defaultFn(() => new Date()),
+}, (table) => ({
+  pk: primaryKey({ columns: [table.releaseId, table.customerId] }),
+}));
+
+export const releaseCustomersRelations = relations(releaseCustomers, ({ one }) => ({
+  release: one(releases, { fields: [releaseCustomers.releaseId], references: [releases.id] }),
+  customer: one(customers, { fields: [releaseCustomers.customerId], references: [customers.id] }),
+}));
+
 // ==================== Types ====================
 export type Cluster = typeof clusters.$inferSelect;
 export type NewCluster = typeof clusters.$inferInsert;
@@ -132,6 +147,9 @@ export type NewStepTemplate = typeof stepTemplates.$inferInsert;
 
 export type CustomerStep = typeof customerSteps.$inferSelect;
 export type NewCustomerStep = typeof customerSteps.$inferInsert;
+
+export type ReleaseCustomer = typeof releaseCustomers.$inferSelect;
+export type NewReleaseCustomer = typeof releaseCustomers.$inferInsert;
 
 export type StepCategory = 'deploy' | 'verify';
 export type StepType = 'bash' | 'sql' | 'text';

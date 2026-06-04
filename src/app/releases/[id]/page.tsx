@@ -154,13 +154,18 @@ export default async function ReleaseDetailPage({ params }: ReleaseDetailPagePro
         </CardContent>
       </Card>
 
-      {/* Steps Management (for draft) */}
-      {release.status === 'draft' && (
+      {/* Steps Management (draft and active releases) */}
+      {(release.status === 'draft' || release.status === 'active') && (
         <Card>
           <CardHeader>
             <CardTitle>Template Steps</CardTitle>
           </CardHeader>
           <CardContent>
+            {release.status === 'active' && (
+              <p className="text-sm text-slate-500 mb-4">
+                Steps added here will be propagated to all enrolled customers as pending steps.
+              </p>
+            )}
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <h3 className="font-medium mb-3">Deploy Steps ({release.templates.filter(t => t.category === 'deploy').length})</h3>
