@@ -156,7 +156,7 @@ export function ReleaseMatrixClient({ stepsByCluster, category, releaseId }: Rel
                   <table className="w-full">
                     <thead>
                       <tr className="border-b">
-                        <th className="text-left py-2 px-3 font-medium text-slate-500 w-48">Step</th>
+                        <th className="text-left py-2 px-3 font-medium text-slate-500 w-48 sticky left-0 z-20 bg-white after:absolute after:right-0 after:top-0 after:bottom-0 after:w-px after:bg-slate-200">Step</th>
                         {customers.map((customer: any) => (
                           <th key={customer.customer.id} className="text-center py-2 px-3 font-medium text-slate-500 min-w-[140px]">
                             <div>{customer.customer.name}</div>
@@ -197,8 +197,8 @@ export function ReleaseMatrixClient({ stepsByCluster, category, releaseId }: Rel
                     </thead>
                     <tbody>
                       {steps.map((step: any, stepIndex: number) => (
-                        <tr key={step.id} className="border-b hover:bg-slate-50">
-                          <td className="py-3 px-3">
+                        <tr key={step.id} className="border-b hover:bg-slate-50 group">
+                          <td className="py-3 px-3 sticky left-0 z-10 bg-white group-hover:bg-slate-50 after:absolute after:right-0 after:top-0 after:bottom-0 after:w-px after:bg-slate-200">
                             <div className="flex items-center gap-2">
                               <span className="text-xs text-slate-400 w-6">{stepIndex + 1}.</span>
                               <div>
