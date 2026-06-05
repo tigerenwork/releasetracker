@@ -233,13 +233,19 @@ export function ReleaseMatrixClient({ stepsByCluster, category, releaseId }: Rel
                             
                             if (!customerStep) return <td key={customer.customer.id} className="py-2 px-3"></td>;
 
+                            const hasNotes = !!customerStep.notes;
+
                             return (
                               <td key={customer.customer.id} className="py-2 px-3 text-center">
                                 <button
                                   onClick={() => handleStepClick(customerStep, step.template)}
-                                  className="hover:scale-110 transition-transform"
+                                  className="relative inline-flex hover:scale-110 transition-transform"
+                                  title={hasNotes ? customerStep.notes : undefined}
                                 >
                                   {statusIcons[customerStep.status as keyof typeof statusIcons]}
+                                  {hasNotes && (
+                                    <span className="absolute -top-1 -right-1 w-2 h-2 bg-orange-400 rounded-full" />
+                                  )}
                                 </button>
                               </td>
                             );
