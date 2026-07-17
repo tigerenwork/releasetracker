@@ -131,18 +131,15 @@ async function executeCommand(request, id) {
     }
   }
   
-  const response = await fetch(`${connectionState.agentUrl}/execute`, {
+  const response = await fetch(`${connectionState.agentUrl}/api/v1/execute`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
       'X-Agent-Token': connectionState.token
     },
     body: JSON.stringify({
-      id: id,
-      type: request.type,
-      command: request.command,
-      context: request.context || {},
-      timeout: request.timeout || 300
+      ...request,
+      id: id
     })
   });
   
