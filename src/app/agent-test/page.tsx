@@ -11,6 +11,7 @@ import {
   ScriptStepExecutor,
   TextStepDisplay,
 } from '@/components/executors';
+import { PodStatusPanel } from '@/components/pods/pod-status-panel';
 import { agentBridge, type AgentStatus } from '@/lib/services/agent-bridge';
 
 /**
@@ -101,13 +102,18 @@ export default function AgentTestPage() {
       </Card>
 
       {/* Execution Types */}
-      <Tabs defaultValue="sql" className="space-y-6">
-        <TabsList className="grid w-full grid-cols-4">
+      <Tabs defaultValue="pods" className="space-y-6">
+        <TabsList className="grid w-full grid-cols-5">
+          <TabsTrigger value="pods">Pods</TabsTrigger>
           <TabsTrigger value="sql">SQL</TabsTrigger>
           <TabsTrigger value="rest">REST</TabsTrigger>
           <TabsTrigger value="script">Script</TabsTrigger>
           <TabsTrigger value="text">Text</TabsTrigger>
         </TabsList>
+
+        <TabsContent value="pods" className="space-y-4">
+          <PodStatusPanel namespace="test" kubeContext="volcengine" />
+        </TabsContent>
 
         <TabsContent value="sql" className="space-y-4">
           <Card>

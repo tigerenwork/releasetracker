@@ -41,7 +41,7 @@ export interface ScriptExecutionConfig {
 
 export interface ExecutionRequest {
   id: string;
-  type: 'sql' | 'rest' | 'script';
+  type: 'sql' | 'rest' | 'script' | 'pods';
   context: ExecutionContext;
   timeout?: number;
   sql?: SQLExecutionConfig;
@@ -49,15 +49,30 @@ export interface ExecutionRequest {
   script?: ScriptExecutionConfig;
 }
 
+export interface PodInfo {
+  name: string;
+  status: string;
+  ready: string;
+  restarts: number;
+  lastRestartAt: string | null;
+  createdAt: string;
+  node?: string;
+  ip?: string;
+}
+
 export interface ExecutionResult {
   success: boolean;
   executionId: string;
-  type: 'sql' | 'rest' | 'script';
+  type: 'sql' | 'rest' | 'script' | 'pods';
   exitCode?: number;
   duration: number;
   timestamp: string;
   stdout?: string;
   stderr?: string;
+  pods?: {
+    count: number;
+    items: PodInfo[];
+  };
   sql?: {
     stdout: string;
     stderr: string;
@@ -248,6 +263,18 @@ class AgentBridge {
       type: 'script',
       context,
       script,
+      timeout,
+    });
+  }
+
+  /**
+   * List pods with status details
+   */
+  async getPods(context: ExecutionContext, timeout = 30): Promise<ExecutionResult> {
+    return this.execute({
+      id: `pods-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+      type: 'pods',
+      context,
       timeout,
     });
   }

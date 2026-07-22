@@ -22,6 +22,7 @@ const { logger } = require('./src/utils/logger');
 const { SQLExecutor } = require('./src/executors/sql');
 const { RESTExecutor } = require('./src/executors/rest');
 const { ScriptExecutor } = require('./src/executors/script');
+const { PodsExecutor } = require('./src/executors/pods');
 
 const HOST = process.env.AGENT_HOST || '127.0.0.1';
 const PORT = process.env.AGENT_PORT || 3456;
@@ -32,6 +33,7 @@ const LOG_LEVEL = process.env.LOG_LEVEL || 'info';
 const sqlExecutor = new SQLExecutor();
 const restExecutor = new RESTExecutor();
 const scriptExecutor = new ScriptExecutor();
+const podsExecutor = new PodsExecutor();
 
 // Store active executions
 const activeExecutions = new Map();
@@ -127,6 +129,10 @@ async function handleExecute(req, res) {
           result = await scriptExecutor.execute(data);
           break;
 
+        case 'pods':
+          result = await podsExecutor.execute(data);
+          break;
+
         default:
           throw new Error(`Unknown execution type: ${data.type}`);
       }
@@ -182,7 +188,7 @@ server.listen(PORT, HOST, () => {
 ╚════════════════════════════════════════════════════════╝
   `);
   logger.info('Agent started and ready for connections');
-  logger.info('Supported execution types: sql, rest, script');
+  logger.info('Supported execution types: sql, rest, script, pods');
 });
 
 // Graceful shutdown

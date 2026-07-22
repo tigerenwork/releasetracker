@@ -32,23 +32,34 @@
  * 
  * @typedef {Object} ExecutionRequest
  * @property {string} id
- * @property {'sql'|'rest'|'script'} type
+ * @property {'sql'|'rest'|'script'|'pods'} type
  * @property {ExecutionContext} context
  * @property {number} [timeout]
  * @property {SQLExecutionConfig} [sql]
  * @property {RESTExecutionConfig} [rest]
  * @property {ScriptExecutionConfig} [script]
  * 
+ * @typedef {Object} PodInfo
+ * @property {string} name
+ * @property {string} status
+ * @property {string} ready
+ * @property {number} restarts
+ * @property {string|null} lastRestartAt
+ * @property {string} createdAt
+ * @property {string} [node]
+ * @property {string} [ip]
+ * 
  * @typedef {Object} ExecutionResponse
  * @property {boolean} success
  * @property {string} executionId
- * @property {'sql'|'rest'|'script'} type
+ * @property {'sql'|'rest'|'script'|'pods'} type
  * @property {number} [exitCode]
  * @property {number} duration
  * @property {string} timestamp
  * @property {Object} [sql]
  * @property {Object} [rest]
  * @property {Object} [script]
+ * @property {{count: number, items: PodInfo[]}} [pods]
  * @property {Object} [error]
  */
 
