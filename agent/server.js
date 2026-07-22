@@ -71,6 +71,12 @@ const server = http.createServer((req, res) => {
     return;
   }
 
+  // Streaming execute endpoint (NDJSON, script type only)
+  if (url.pathname === '/api/v1/execute/stream' && req.method === 'POST') {
+    handleExecuteStream(req, res);
+    return;
+  }
+
   // Cancel endpoint
   if (url.pathname.startsWith('/api/v1/execute/') && url.pathname.endsWith('/cancel') && req.method === 'POST') {
     handleCancel(req, res);
@@ -151,6 +157,70 @@ async function handleExecute(req, res) {
         }
       }));
     }
+  });
+}
+
+async function handleExecuteStream(req, res) {
+  // Check token
+  const authHeader = req.headers['x-agent-token'];
+  if (authHeader !== TOKEN) {
+    logger.warn('Invalid token attempt');
+    res.writeHead(401, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ error: 'Invalid token' }));
+    return;
+  }
+
+  let body = '';
+  req.on('data', chunk => body += chunk);
+  req.on('end', async () => {
+    let data;
+    try {
+      data = JSON.parse(body);
+    } catch {
+      res.writeHead(400, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'Invalid JSON body' }));
+      return;
+    }
+
+    logger.info(`[Execute] Stream received: type=${data.type}, id=${data.id}`);
+
+    if (!data.id || data.type !== 'script' || !data.context || !data.script) {
+      res.writeHead(400, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'Stream requires: id, type=script, context, script' }));
+      return;
+    }
+
+    res.writeHead(200, {
+      'Content-Type': 'application/x-ndjson',
+      'Cache-Control': 'no-cache',
+      'X-Accel-Buffering': 'no'
+    });
+
+    const send = (obj) => {
+      try {
+        res.write(JSON.stringify(obj) + '\n');
+      } catch {
+        // Client already gone
+      }
+    };
+
+    const { promise, kill } = scriptExecutor.executeStream(data, send);
+
+    // If the client disconnects mid-stream, kill the kubectl child
+    res.on('close', () => {
+      if (!res.writableEnded) {
+        logger.info(`[Execute] Stream client disconnected, killing execution: id=${data.id}`);
+        kill();
+      }
+    });
+
+    try {
+      const result = await promise;
+      send({ type: 'done', result });
+    } catch (err) {
+      send({ type: 'error', message: err.message });
+    }
+    res.end();
   });
 }
 

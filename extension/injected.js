@@ -118,6 +118,86 @@
       },
       
       /**
+       * Execute a command through the agent with streaming output.
+       * onChunk({type: 'stdout'|'stderr', data}) is called as output arrives.
+       * Returns a promise for the final result, with an attached cancel() method.
+       */
+      executeStream(request, onChunk) {
+        const id = generateId();
+        // request.timeout is in seconds (agent-side); wait slightly longer
+        const timeoutMs = (request.timeout || 30) * 1000 + 5000;
+
+        let cleanup = () => {};
+        let settled = false;
+        let resolvePromise = () => {};
+
+        const promise = new Promise((resolve, reject) => {
+          resolvePromise = resolve;
+
+          const timeout = setTimeout(() => {
+            cleanup();
+            window.postMessage({ type: 'RT_EXECUTE_STREAM_CANCEL', id }, '*');
+            reject(new Error('Execution timeout'));
+          }, timeoutMs);
+
+          const handler = (event) => {
+            if (event.source !== window) return;
+            if (event.data?.type !== 'RT_EXECUTE_STREAM_CHUNK') return;
+            if (event.data.id !== id) return;
+
+            const chunk = event.data.chunk || {};
+
+            if (chunk.type === 'done') {
+              cleanup();
+              resolve(chunk.result);
+            } else if (chunk.type === 'error') {
+              cleanup();
+              reject(new Error(chunk.message || 'Execution failed'));
+            } else if (chunk.type === 'stdout' || chunk.type === 'stderr') {
+              try {
+                onChunk && onChunk(chunk);
+              } catch {
+                // Ignore chunk handler errors
+              }
+            }
+          };
+
+          cleanup = () => {
+            if (settled) return;
+            settled = true;
+            clearTimeout(timeout);
+            window.removeEventListener('message', handler);
+            pendingRequests.delete(id);
+          };
+
+          window.addEventListener('message', handler);
+          pendingRequests.set(id, { handler, timeout });
+
+          window.postMessage({
+            type: 'RT_EXECUTE_STREAM',
+            id: id,
+            payload: request
+          }, '*');
+        });
+
+        // Expose cancel so callers can abort mid-stream
+        promise.cancel = () => {
+          cleanup();
+          window.postMessage({ type: 'RT_EXECUTE_STREAM_CANCEL', id }, '*');
+          resolvePromise({
+            success: false,
+            executionId: id,
+            type: request.type,
+            duration: 0,
+            timestamp: new Date().toISOString(),
+            error: { code: 'CANCELLED', message: 'Execution cancelled' }
+          });
+        };
+
+        return promise;
+      },
+
+      /**
        * Simple ping to test connectivity
        */
       async ping() {

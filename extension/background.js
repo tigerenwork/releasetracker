@@ -47,6 +47,78 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   return true; // Keep channel open for async
 });
 
+// Handle streaming connections from content script
+chrome.runtime.onConnect.addListener((port) => {
+  if (port.name !== 'rt-stream') return;
+
+  const controller = new AbortController();
+  port.onDisconnect.addListener(() => controller.abort());
+
+  port.onMessage.addListener(async (msg) => {
+    if (msg.action !== 'executeStream') return;
+
+    const send = (obj) => {
+      try {
+        port.postMessage({ id: msg.id, ...obj });
+      } catch {
+        // Port already disconnected
+      }
+    };
+
+    try {
+      if (!connectionState.connected) {
+        await checkConnection();
+      }
+
+      const response = await fetch(`${connectionState.agentUrl}/api/v1/execute/stream`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Agent-Token': connectionState.token
+        },
+        body: JSON.stringify({ ...msg.request, id: msg.id }),
+        signal: controller.signal
+      });
+
+      if (!response.ok) {
+        const text = await response.text();
+        send({
+          type: 'error',
+          message: response.status === 401
+            ? 'Authentication failed. Check your token.'
+            : `Agent error: ${text}`
+        });
+        return;
+      }
+
+      // Read NDJSON stream line by line
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n');
+        buffer = lines.pop() || '';
+        for (const line of lines) {
+          if (!line.trim()) continue;
+          try {
+            send(JSON.parse(line));
+          } catch {
+            // Skip malformed line
+          }
+        }
+      }
+    } catch (err) {
+      if (err.name !== 'AbortError') {
+        send({ type: 'error', message: err.message });
+      }
+    }
+  });
+});
+
 async function handleMessage(request) {
   console.log('[RT:Background] Received action:', request.action);
   

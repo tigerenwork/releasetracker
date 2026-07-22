@@ -72,6 +72,11 @@ export interface PodInfo {
   containers: ContainerInfo[];
 }
 
+export interface ScriptStreamChunk {
+  type: 'stdout' | 'stderr';
+  data: string;
+}
+
 export interface ExecutionResult {
   success: boolean;
   executionId: string;
@@ -293,6 +298,35 @@ class AgentBridge {
     });
   }
 
+  /**
+   * Execute script with streaming output.
+   * onChunk is called as stdout/stderr data arrives; the returned promise
+   * resolves to the final result. Call cancel() to abort mid-stream.
+   */
+  executeScriptStream(
+    context: ExecutionContext,
+    script: ScriptExecutionConfig,
+    onChunk: (chunk: ScriptStreamChunk) => void,
+    timeout = 60
+  ): { promise: Promise<ExecutionResult>; cancel: () => void } {
+    if (!this.isAvailable()) {
+      throw new Error('Agent extension not installed');
+    }
+
+    const stream = window.rtAgent!.executeStream(
+      {
+        id: `script-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+        type: 'script',
+        context,
+        script,
+        timeout,
+      },
+      onChunk
+    );
+
+    return { promise: stream, cancel: () => stream.cancel() };
+  }
+
   destroy() {
     if (this.checkInterval) {
       clearInterval(this.checkInterval);
@@ -310,6 +344,10 @@ declare global {
       version: string;
       isAvailable(): boolean;
       execute(request: ExecutionRequest): Promise<ExecutionResult>;
+      executeStream(
+        request: ExecutionRequest,
+        onChunk: (chunk: ScriptStreamChunk) => void
+      ): Promise<ExecutionResult> & { cancel(): void };
       getStatus(): Promise<{ connected: boolean; version?: string; agentUrl?: string }>;
       ping(): Promise<ExecutionResult>;
     };

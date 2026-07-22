@@ -92,6 +92,146 @@ class ScriptExecutor {
   }
 
   /**
+   * Execute script with streaming output
+   * Each stdout/stderr data event is passed to emit() as it arrives.
+   * Returns { promise, kill } — promise resolves to the final result,
+   * kill() terminates the kubectl child (used on client disconnect).
+   *
+   * @param {import('../types').ExecutionRequest} request
+   * @param {(chunk: {type: 'stdout'|'stderr', data: string}) => void} emit
+   */
+  executeStream(request, emit) {
+    const { script, context, id, timeout = 600 } = request;
+    const startTime = Date.now();
+    const MAX_OUTPUT = 50000;
+
+    let child = null;
+    let cancelled = false;
+
+    const promise = (async () => {
+      try {
+        // 1. Find target pod (or use the pod specified directly)
+        let podName = context.podName;
+        if (!podName) {
+          logger.info(`[Script] Finding pod: context=${context.kubeContext || 'current'}, namespace=${context.namespace}, selector=${context.podSelector}`);
+          podName = await this.findPod(context.namespace, context.podSelector, context.kubeContext);
+        }
+        logger.info(`[Script] Streaming ${script.interpreter} script in ${podName}...`);
+
+        // 2. Prepare command
+        const { command, args } = this.buildCommand(script);
+
+        // 3. Build kubectl exec arguments
+        const kubectlArgs = [
+          'exec',
+          ...(context.kubeContext ? ['--context', context.kubeContext] : []),
+          '-n', context.namespace,
+          podName,
+          ...(context.containerName ? ['-c', context.containerName] : []),
+          '-i',
+          '--', command, ...args
+        ];
+
+        // 4. Execute with script content via stdin, streaming output
+        return await new Promise((resolve) => {
+          child = spawn('kubectl', kubectlArgs);
+          let stdout = '';
+          let stderr = '';
+          let timedOut = false;
+
+          const timeoutId = setTimeout(() => {
+            timedOut = true;
+            child.kill('SIGTERM');
+          }, timeout * 1000);
+
+          child.stdout.on('data', (data) => {
+            const text = data.toString();
+            stdout += text;
+            emit({ type: 'stdout', data: text });
+          });
+          child.stderr.on('data', (data) => {
+            const text = data.toString();
+            stderr += text;
+            emit({ type: 'stderr', data: text });
+          });
+
+          child.stdin.write(script.content);
+          child.stdin.end();
+
+          child.on('close', (rawExitCode) => {
+            clearTimeout(timeoutId);
+            const exitCode = timedOut ? 124 : (rawExitCode || 0);
+            if (timedOut) stderr += '\n[Execution timed out after ' + timeout + 's]';
+            if (cancelled) stderr += '\n[Execution cancelled]';
+
+            const success = !timedOut && !cancelled && exitCode === 0;
+
+            resolve({
+              success,
+              executionId: id,
+              type: 'script',
+              exitCode,
+              duration: Date.now() - startTime,
+              timestamp: new Date().toISOString(),
+              script: {
+                stdout: stdout.slice(0, MAX_OUTPUT),
+                stderr: stderr.slice(0, MAX_OUTPUT),
+                stdoutTruncated: stdout.length > MAX_OUTPUT,
+                stderrTruncated: stderr.length > MAX_OUTPUT,
+                exitCode,
+                command: `${command} ${args.join(' ')}`
+              },
+              error: !success ? {
+                code: 'SCRIPT_ERROR',
+                message: stderr || 'Script execution failed',
+                details: { exitCode }
+              } : undefined
+            });
+          });
+
+          child.on('error', (err) => {
+            clearTimeout(timeoutId);
+            resolve({
+              success: false,
+              executionId: id,
+              type: 'script',
+              duration: Date.now() - startTime,
+              timestamp: new Date().toISOString(),
+              error: {
+                code: 'EXECUTION_FAILED',
+                message: err.message,
+                details: err.stack
+              }
+            });
+          });
+        });
+      } catch (err) {
+        logger.error('[Script] Stream failed:', err.message);
+        return {
+          success: false,
+          executionId: id,
+          type: 'script',
+          duration: Date.now() - startTime,
+          timestamp: new Date().toISOString(),
+          error: {
+            code: 'EXECUTION_FAILED',
+            message: err.message,
+            details: err.stack
+          }
+        };
+      }
+    })();
+
+    return {
+      promise,
+      kill: () => {
+        cancelled = true;
+        if (child) child.kill('SIGTERM');
+      }
+    };
+  }
+
+  /**
    * Build command for interpreter
    */
   buildCommand(script) {

@@ -7,6 +7,9 @@
 
 console.log('[RT:Content] Content script loaded on:', window.location.href);
 
+// Active streaming ports, keyed by request id
+const streamPorts = new Map();
+
 // Listen for messages from the injected script (page context)
 window.addEventListener('message', async (event) => {
   // Only accept messages from the same window
@@ -61,6 +64,39 @@ window.addEventListener('message', async (event) => {
           success: false,
           error: err.message
         }, '*');
+      }
+      break;
+    }
+    case 'RT_EXECUTE_STREAM': {
+      const port = chrome.runtime.connect({ name: 'rt-stream' });
+      streamPorts.set(event.data.id, port);
+
+      port.onMessage.addListener((msg) => {
+        window.postMessage({
+          type: 'RT_EXECUTE_STREAM_CHUNK',
+          id: event.data.id,
+          chunk: msg
+        }, '*');
+
+        if (msg.type === 'done' || msg.type === 'error') {
+          streamPorts.delete(event.data.id);
+          port.disconnect();
+        }
+      });
+
+      port.postMessage({
+        action: 'executeStream',
+        id: event.data.id,
+        request: event.data.payload
+      });
+      break;
+    }
+
+    case 'RT_EXECUTE_STREAM_CANCEL': {
+      const port = streamPorts.get(event.data.id);
+      if (port) {
+        streamPorts.delete(event.data.id);
+        port.disconnect();
       }
       break;
     }
