@@ -122,7 +122,9 @@ export function ReleaseMatrixClient({ stepsByCluster, category, releaseId }: Rel
     <>
       <div className="space-y-6">
         {clusters.map((clusterData: any) => {
-          const customers = Object.values(clusterData.customers);
+          const customers = Object.values(clusterData.customers).sort((a: any, b: any) =>
+            (a.customer.namespace || a.customer.name).localeCompare(b.customer.namespace || b.customer.name)
+          );
           
           // Get all unique steps for this category, sorted by orderIndex
           const allSteps = new Map();
