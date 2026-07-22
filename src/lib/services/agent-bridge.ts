@@ -40,14 +40,20 @@ export interface ScriptExecutionConfig {
   workingDir?: string;
 }
 
+export interface LogsExecutionConfig {
+  tailLines?: number;
+  timestamps?: boolean;
+}
+
 export interface ExecutionRequest {
   id: string;
-  type: 'sql' | 'rest' | 'script' | 'pods';
+  type: 'sql' | 'rest' | 'script' | 'pods' | 'logs';
   context: ExecutionContext;
   timeout?: number;
   sql?: SQLExecutionConfig;
   rest?: RESTExecutionConfig;
   script?: ScriptExecutionConfig;
+  logs?: LogsExecutionConfig;
 }
 
 export interface ContainerInfo {
@@ -342,6 +348,33 @@ class AgentBridge {
         context,
         script,
         timeout,
+      },
+      onChunk
+    );
+
+    return { promise: stream, cancel: () => stream.cancel() };
+  }
+
+  /**
+   * Stream container logs (kubectl logs -f).
+   * No page-side timeout — call cancel() to stop the stream.
+   */
+  getLogsStream(
+    context: ExecutionContext,
+    logs: LogsExecutionConfig,
+    onChunk: (chunk: ScriptStreamChunk) => void
+  ): { promise: Promise<ExecutionResult>; cancel: () => void } {
+    if (!this.isAvailable()) {
+      throw new Error('Agent extension not installed');
+    }
+
+    const stream = window.rtAgent!.executeStream(
+      {
+        id: `logs-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+        type: 'logs',
+        context,
+        logs,
+        timeout: 0,
       },
       onChunk
     );

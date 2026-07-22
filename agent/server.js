@@ -24,6 +24,7 @@ const { SQLExecutor } = require('./src/executors/sql');
 const { RESTExecutor } = require('./src/executors/rest');
 const { ScriptExecutor } = require('./src/executors/script');
 const { PodsExecutor } = require('./src/executors/pods');
+const { LogsExecutor } = require('./src/executors/logs');
 const shell = require('./src/shell');
 
 const HOST = process.env.AGENT_HOST || '127.0.0.1';
@@ -36,6 +37,7 @@ const sqlExecutor = new SQLExecutor();
 const restExecutor = new RESTExecutor();
 const scriptExecutor = new ScriptExecutor();
 const podsExecutor = new PodsExecutor();
+const logsExecutor = new LogsExecutor();
 
 // Store active executions
 const activeExecutions = new Map();
@@ -73,7 +75,7 @@ const server = http.createServer((req, res) => {
     return;
   }
 
-  // Streaming execute endpoint (NDJSON, script type only)
+  // Streaming execute endpoint (NDJSON, script and logs types)
   if (url.pathname === '/api/v1/execute/stream' && req.method === 'POST') {
     handleExecuteStream(req, res);
     return;
@@ -186,9 +188,9 @@ async function handleExecuteStream(req, res) {
 
     logger.info(`[Execute] Stream received: type=${data.type}, id=${data.id}`);
 
-    if (!data.id || data.type !== 'script' || !data.context || !data.script) {
+    if (!data.id || !data.type || !data.context) {
       res.writeHead(400, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ error: 'Stream requires: id, type=script, context, script' }));
+      res.end(JSON.stringify({ error: 'Stream requires: id, type, context' }));
       return;
     }
 
@@ -206,7 +208,25 @@ async function handleExecuteStream(req, res) {
       }
     };
 
-    const { promise, kill } = scriptExecutor.executeStream(data, send);
+    let stream;
+    try {
+      if (data.type === 'script') {
+        if (!data.script) {
+          throw new Error('Missing script configuration');
+        }
+        stream = scriptExecutor.executeStream(data, send);
+      } else if (data.type === 'logs') {
+        stream = logsExecutor.executeStream(data, send);
+      } else {
+        throw new Error(`Streaming not supported for type: ${data.type}`);
+      }
+    } catch (err) {
+      send({ type: 'error', message: err.message });
+      res.end();
+      return;
+    }
+
+    const { promise, kill } = stream;
 
     // If the client disconnects mid-stream, kill the kubectl child
     res.on('close', () => {

@@ -124,8 +124,9 @@
        */
       executeStream(request, onChunk) {
         const id = generateId();
-        // request.timeout is in seconds (agent-side); wait slightly longer
-        const timeoutMs = (request.timeout || 30) * 1000 + 5000;
+        // request.timeout is in seconds (agent-side); wait slightly longer.
+        // timeout 0/undefined = no page-side timeout (long-lived streams like logs -f)
+        const timeoutMs = request.timeout ? request.timeout * 1000 + 5000 : 0;
 
         let cleanup = () => {};
         let settled = false;
@@ -134,11 +135,11 @@
         const promise = new Promise((resolve, reject) => {
           resolvePromise = resolve;
 
-          const timeout = setTimeout(() => {
+          const timeout = timeoutMs > 0 ? setTimeout(() => {
             cleanup();
             window.postMessage({ type: 'RT_EXECUTE_STREAM_CANCEL', id }, '*');
             reject(new Error('Execution timeout'));
-          }, timeoutMs);
+          }, timeoutMs) : null;
 
           const handler = (event) => {
             if (event.source !== window) return;

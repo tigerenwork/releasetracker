@@ -31,6 +31,10 @@
  * @property {Object} [environment]
  * @property {string} [workingDir]
  * 
+ * @typedef {Object} LogsExecutionConfig
+ * @property {number} [tailLines]
+ * @property {boolean} [timestamps]
+ * 
  * @typedef {Object} ExecutionRequest
  * @property {string} id
  * @property {'sql'|'rest'|'script'|'pods'} type
