@@ -4,17 +4,10 @@ import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table';
 import { ChevronDown, ChevronRight, Loader2, RefreshCw } from 'lucide-react';
 import { agentBridge, type PodInfo } from '@/lib/services/agent-bridge';
-import { formatRelativeTime, statusVariant } from '@/components/pods/pod-utils';
+import { formatRelativeTime } from '@/components/pods/pod-utils';
+import { PodTable } from '@/components/pods/pod-table';
 
 interface ClusterPodsCardProps {
   clusterName: string;
@@ -209,38 +202,7 @@ export function ClusterPodsCard({ clusterName, customers, releaseId }: ClusterPo
 
                   {isExpanded && hasPods && (
                     <div className="mt-2 ml-7">
-                      <Table>
-                        <TableHeader>
-                          <TableRow>
-                            <TableHead>Name</TableHead>
-                            <TableHead>Status</TableHead>
-                            <TableHead>Ready</TableHead>
-                            <TableHead>Restarts</TableHead>
-                            <TableHead>Last Restart</TableHead>
-                            <TableHead>Age</TableHead>
-                            <TableHead>IP</TableHead>
-                          </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                          {state.pods!.map((pod) => (
-                            <TableRow key={pod.name}>
-                              <TableCell className="font-mono text-xs">{pod.name}</TableCell>
-                              <TableCell>
-                                <Badge variant={statusVariant(pod.status)}>{pod.status}</Badge>
-                              </TableCell>
-                              <TableCell>{pod.ready}</TableCell>
-                              <TableCell
-                                className={pod.restarts > 0 ? 'text-amber-600 font-medium' : ''}
-                              >
-                                {pod.restarts}
-                              </TableCell>
-                              <TableCell>{formatRelativeTime(pod.lastRestartAt)}</TableCell>
-                              <TableCell>{formatRelativeTime(pod.createdAt)}</TableCell>
-                              <TableCell className="font-mono text-xs">{pod.ip || '—'}</TableCell>
-                            </TableRow>
-                          ))}
-                        </TableBody>
-                      </Table>
+                      <PodTable pods={state.pods!} />
                     </div>
                   )}
                 </div>

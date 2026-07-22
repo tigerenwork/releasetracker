@@ -49,6 +49,16 @@ export interface ExecutionRequest {
   script?: ScriptExecutionConfig;
 }
 
+export interface ContainerInfo {
+  name: string;
+  ready: boolean;
+  restartCount: number;
+  state: string;
+  startedAt: string | null;
+  lastTerminatedAt: string | null;
+  lastTerminatedReason: string | null;
+}
+
 export interface PodInfo {
   name: string;
   status: string;
@@ -58,6 +68,7 @@ export interface PodInfo {
   createdAt: string;
   node?: string;
   ip?: string;
+  containers: ContainerInfo[];
 }
 
 export interface ExecutionResult {

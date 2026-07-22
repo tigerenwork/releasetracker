@@ -94,6 +94,19 @@ class PodsExecutor {
       }
     }
 
+    // Per-container status details
+    const containers = containerStatuses.map((c) => ({
+      name: c.name,
+      ready: !!c.ready,
+      restartCount: c.restartCount || 0,
+      state: c.state?.running
+        ? 'Running'
+        : c.state?.waiting?.reason || c.state?.terminated?.reason || 'Unknown',
+      startedAt: c.state?.running?.startedAt || null,
+      lastTerminatedAt: c.lastState?.terminated?.finishedAt || null,
+      lastTerminatedReason: c.lastState?.terminated?.reason || null
+    }));
+
     return {
       name: pod.metadata?.name,
       status,
@@ -102,7 +115,8 @@ class PodsExecutor {
       lastRestartAt,
       createdAt: pod.metadata?.creationTimestamp,
       node: pod.spec?.nodeName,
-      ip: pod.status?.podIP
+      ip: pod.status?.podIP,
+      containers
     };
   }
 

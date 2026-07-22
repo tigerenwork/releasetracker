@@ -39,6 +39,15 @@
  * @property {RESTExecutionConfig} [rest]
  * @property {ScriptExecutionConfig} [script]
  * 
+ * @typedef {Object} ContainerInfo
+ * @property {string} name
+ * @property {boolean} ready
+ * @property {number} restartCount
+ * @property {string} state
+ * @property {string|null} startedAt
+ * @property {string|null} lastTerminatedAt
+ * @property {string|null} lastTerminatedReason
+ * 
  * @typedef {Object} PodInfo
  * @property {string} name
  * @property {string} status
@@ -48,6 +57,7 @@
  * @property {string} createdAt
  * @property {string} [node]
  * @property {string} [ip]
+ * @property {ContainerInfo[]} containers
  * 
  * @typedef {Object} ExecutionResponse
  * @property {boolean} success
