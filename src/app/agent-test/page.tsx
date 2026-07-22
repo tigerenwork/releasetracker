@@ -40,23 +40,27 @@ export default function AgentTestPage() {
     return () => clearInterval(interval);
   }, []);
 
-  // Sample configurations (these would normally come from customer settings)
+  // Sample configurations targeting the volcengine cluster, test namespace
   const sqlConfig = {
-    namespace: 'default',
-    podSelector: 'app=db-client',
-    sqlClient: 'psql' as const,
-    connectionEnvVar: 'DATABASE_URL',
+    namespace: 'test',
+    podSelector: 'app=redis',
+    kubeContext: 'volcengine',
+    sqlClient: 'redis-cli' as const,
   };
 
   const restConfig = {
-    namespace: 'default',
-    podSelector: 'app=api-client',
-    baseUrl: 'http://localhost:8080',
+    namespace: 'test',
+    podSelector: 'app=aldebaran',
+    containerName: 'container-0',
+    kubeContext: 'volcengine',
+    baseUrl: 'http://localhost:8000',
   };
 
   const scriptConfig = {
-    namespace: 'default',
-    podSelector: 'app=executor',
+    namespace: 'test',
+    podSelector: 'app=aldebaran',
+    containerName: 'container-0',
+    kubeContext: 'volcengine',
   };
 
   return (
@@ -118,7 +122,7 @@ export default function AgentTestPage() {
                 stepId={1}
                 customerId={1}
                 releaseId={1}
-                query="SELECT version();"
+                query="PING"
                 config={sqlConfig}
                 onExecutionComplete={(result) => {
                   console.log('SQL execution completed:', result);
@@ -136,8 +140,8 @@ export default function AgentTestPage() {
                 stepId={2}
                 customerId={1}
                 releaseId={1}
-                query="\\dt"
-                config={{ ...sqlConfig, sqlClient: 'psql' }}
+                query="CONFIG GET maxmemory"
+                config={{ ...sqlConfig, sqlClient: 'redis-cli' }}
               />
             </CardContent>
           </Card>
@@ -168,17 +172,15 @@ export default function AgentTestPage() {
 
           <Card>
             <CardHeader>
-              <CardTitle>POST Request Example</CardTitle>
+              <CardTitle>GET OpenAPI Spec Example</CardTitle>
             </CardHeader>
             <CardContent>
               <RESTStepExecutor
                 stepId={4}
                 customerId={1}
                 releaseId={1}
-                method="POST"
-                url="/api/v1/migrate"
-                payload={{ version: '1.2.3', dryRun: false }}
-                headers={{ 'X-Api-Key': 'test-key' }}
+                method="GET"
+                url="/openapi.json"
                 config={restConfig}
               />
             </CardContent>

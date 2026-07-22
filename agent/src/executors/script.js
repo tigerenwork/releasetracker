@@ -18,8 +18,8 @@ class ScriptExecutor {
 
     try {
       // 1. Find target pod
-      logger.info(`[Script] Finding pod: namespace=${context.namespace}, selector=${context.podSelector}`);
-      const podName = await this.findPod(context.namespace, context.podSelector);
+      logger.info(`[Script] Finding pod: context=${context.kubeContext || 'current'}, namespace=${context.namespace}, selector=${context.podSelector}`);
+      const podName = await this.findPod(context.namespace, context.podSelector, context.kubeContext);
       logger.info(`[Script] Found pod: ${podName}`);
 
       // 2. Prepare command
@@ -28,6 +28,7 @@ class ScriptExecutor {
       // 3. Build kubectl exec arguments
       const kubectlArgs = [
         'exec',
+        ...(context.kubeContext ? ['--context', context.kubeContext] : []),
         '-n', context.namespace,
         podName,
         ...(context.containerName ? ['-c', context.containerName] : []),
@@ -102,10 +103,11 @@ class ScriptExecutor {
   /**
    * Find pod by label selector
    */
-  findPod(namespace, selector) {
+  findPod(namespace, selector, kubeContext) {
     return new Promise((resolve, reject) => {
       const kubectl = spawn('kubectl', [
         'get', 'pods',
+        ...(kubeContext ? ['--context', kubeContext] : []),
         '-n', namespace,
         '-l', selector,
         '-o', 'jsonpath={.items[0].metadata.name}'

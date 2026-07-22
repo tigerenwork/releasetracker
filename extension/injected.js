@@ -81,10 +81,14 @@
       async execute(request) {
         return new Promise((resolve, reject) => {
           const id = generateId();
+          // request.timeout is in seconds (agent-side); wait slightly longer
+          // so the agent's own timeout response can still arrive first
+          const timeoutMs = (request.timeout || 30) * 1000 + 5000;
+          console.log('[RT:Injected] Executing', request.type, 'id:', id, 'timeout:', timeoutMs, 'ms');
           const timeout = setTimeout(() => {
             pendingRequests.delete(id);
             reject(new Error('Execution timeout'));
-          }, request.timeout || 30000);
+          }, timeoutMs);
           
           const handler = (event) => {
             if (event.source !== window) return;

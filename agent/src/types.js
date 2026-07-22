@@ -3,6 +3,7 @@
  * @typedef {Object} ExecutionContext
  * @property {number} customerId
  * @property {number} [clusterId]
+ * @property {string} [kubeContext]
  * @property {string} namespace
  * @property {string} podSelector
  * @property {string} [containerName]

@@ -16,6 +16,7 @@ interface SQLStepExecutorProps {
     namespace: string;
     podSelector: string;
     containerName?: string;
+    kubeContext?: string;
     sqlClient: 'psql' | 'mysql' | 'mongosh' | 'redis-cli';
     connectionEnvVar?: string;
   };
@@ -50,6 +51,7 @@ export function SQLStepExecutor({
           namespace: config.namespace,
           podSelector: config.podSelector,
           containerName: config.containerName,
+          kubeContext: config.kubeContext,
           stepId,
           releaseId,
         },

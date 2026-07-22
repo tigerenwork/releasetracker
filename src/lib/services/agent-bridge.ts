@@ -8,6 +8,7 @@
 export interface ExecutionContext {
   customerId: number;
   clusterId?: number;
+  kubeContext?: string;
   namespace: string;
   podSelector: string;
   containerName?: string;
@@ -186,8 +187,9 @@ class AgentBridge {
       type: 'script',
       context: {
         customerId: 0,
-        namespace: 'default',
-        podSelector: 'test',
+        namespace: 'test',
+        podSelector: 'app=redis',
+        kubeContext: 'volcengine',
         stepId: 0,
         releaseId: 0,
       },

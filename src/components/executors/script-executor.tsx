@@ -17,6 +17,7 @@ interface ScriptStepExecutorProps {
     namespace: string;
     podSelector: string;
     containerName?: string;
+    kubeContext?: string;
     workingDir?: string;
   };
   onExecutionComplete?: (result: ExecutionResult) => void;
@@ -51,6 +52,7 @@ export function ScriptStepExecutor({
           namespace: config.namespace,
           podSelector: config.podSelector,
           containerName: config.containerName,
+          kubeContext: config.kubeContext,
           stepId,
           releaseId,
         },
