@@ -10,6 +10,7 @@ import { getReleaseStepsGroupedByCluster, getStepStats } from '@/lib/actions/cus
 import { listCustomers } from '@/lib/actions/customers';
 import { ReleaseMatrixClient } from '@/components/releases/release-matrix-client';
 import { ReleaseActions } from '@/components/releases/release-actions';
+import { ClusterPodsCard } from '@/components/pods/cluster-pods-card';
 
 interface ReleaseDetailPageProps {
   params: Promise<{
@@ -191,6 +192,25 @@ export default async function ReleaseDetailPage({ params }: ReleaseDetailPagePro
       {/* Matrix View (for active) */}
       {release.status === 'active' && (
         <div className="space-y-8">
+          {/* Customer Pods (per cluster) */}
+          <div className="space-y-4">
+            <h2 className="text-lg font-semibold text-slate-800">Customer Pods</h2>
+            {Object.values(stepsByCluster).map((clusterData: any) => (
+              <ClusterPodsCard
+                key={clusterData.cluster?.id || 'unknown'}
+                clusterName={clusterData.cluster?.name || 'Unknown Cluster'}
+                customers={Object.values(clusterData.customers as Record<string, { customer: { id: number; name: string; namespace: string } }>).map(
+                  (c) => ({
+                    id: c.customer.id,
+                    name: c.customer.name,
+                    namespace: c.customer.namespace,
+                  })
+                )}
+                releaseId={releaseId}
+              />
+            ))}
+          </div>
+
           <div>
             <h2 className="text-lg font-semibold text-slate-800 mb-3">
               Deploy Steps

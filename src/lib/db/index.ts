@@ -140,10 +140,11 @@ const CREATE_TABLES_SQL = `
     release_id INTEGER NOT NULL,
     name TEXT NOT NULL,
     category TEXT NOT NULL CHECK(category IN ('deploy', 'verify')),
-    type TEXT NOT NULL CHECK(type IN ('bash', 'sql', 'text')),
+    type TEXT NOT NULL CHECK(type IN ('bash', 'sql', 'rest', 'script', 'text')),
     content TEXT NOT NULL,
     order_index INTEGER NOT NULL,
     description TEXT,
+    execution_config TEXT,
     created_at INTEGER DEFAULT (unixepoch() * 1000),
     FOREIGN KEY (release_id) REFERENCES releases(id) ON DELETE CASCADE,
     UNIQUE(release_id, category, order_index)
@@ -156,7 +157,7 @@ const CREATE_TABLES_SQL = `
     template_id INTEGER,
     name TEXT NOT NULL,
     category TEXT NOT NULL CHECK(category IN ('deploy', 'verify')),
-    type TEXT NOT NULL CHECK(type IN ('bash', 'sql', 'text')),
+    type TEXT NOT NULL CHECK(type IN ('bash', 'sql', 'rest', 'script', 'text')),
     content TEXT NOT NULL,
     order_index INTEGER NOT NULL,
     status TEXT DEFAULT 'pending' CHECK(status IN ('pending', 'done', 'skipped', 'reverted')),
@@ -189,6 +190,46 @@ const CREATE_TABLES_SQL = `
   );
 
   CREATE INDEX IF NOT EXISTS idx_release_customers_release ON release_customers(release_id);
+
+  CREATE TABLE IF NOT EXISTS customer_execution_configs (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    customer_id INTEGER NOT NULL,
+    sql_config TEXT,
+    rest_config TEXT,
+    script_config TEXT,
+    is_active INTEGER DEFAULT 1,
+    created_at INTEGER DEFAULT (unixepoch() * 1000),
+    updated_at INTEGER DEFAULT (unixepoch() * 1000),
+    FOREIGN KEY (customer_id) REFERENCES customers(id) ON DELETE CASCADE,
+    UNIQUE(customer_id)
+  );
+
+  CREATE TABLE IF NOT EXISTS step_executions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    step_id INTEGER NOT NULL,
+    customer_id INTEGER NOT NULL,
+    release_id INTEGER NOT NULL,
+    type TEXT NOT NULL CHECK(type IN ('sql', 'rest', 'script')),
+    status TEXT NOT NULL CHECK(status IN ('running', 'completed', 'failed', 'cancelled', 'timeout')),
+    request TEXT NOT NULL,
+    exit_code INTEGER,
+    stdout TEXT,
+    stderr TEXT,
+    sql_result TEXT,
+    rest_result TEXT,
+    script_result TEXT,
+    started_at INTEGER NOT NULL,
+    completed_at INTEGER,
+    duration INTEGER,
+    created_at INTEGER DEFAULT (unixepoch() * 1000),
+    FOREIGN KEY (step_id) REFERENCES customer_steps(id) ON DELETE CASCADE,
+    FOREIGN KEY (customer_id) REFERENCES customers(id),
+    FOREIGN KEY (release_id) REFERENCES releases(id)
+  );
+
+  CREATE INDEX IF NOT EXISTS step_executions_step_idx ON step_executions(step_id);
+  CREATE INDEX IF NOT EXISTS step_executions_status_idx ON step_executions(status);
+  CREATE INDEX IF NOT EXISTS step_executions_created_idx ON step_executions(created_at);
 `;
 
 // Backfill SQL: populate release_customers from existing customer_steps for already-active releases
@@ -199,6 +240,98 @@ const BACKFILL_SQL = `
   WHERE cs.is_custom = 0
   GROUP BY cs.release_id, cs.customer_id;
 `;
+
+// New DDL used when rebuilding tables whose CHECK constraints predate
+// the 'rest'/'script' step types (SQLite cannot alter CHECK constraints)
+const STEP_TEMPLATES_DDL = `
+  CREATE TABLE step_templates (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    release_id INTEGER NOT NULL,
+    name TEXT NOT NULL,
+    category TEXT NOT NULL CHECK(category IN ('deploy', 'verify')),
+    type TEXT NOT NULL CHECK(type IN ('bash', 'sql', 'rest', 'script', 'text')),
+    content TEXT NOT NULL,
+    order_index INTEGER NOT NULL,
+    description TEXT,
+    execution_config TEXT,
+    created_at INTEGER DEFAULT (unixepoch() * 1000),
+    FOREIGN KEY (release_id) REFERENCES releases(id) ON DELETE CASCADE,
+    UNIQUE(release_id, category, order_index)
+  );
+`;
+
+const CUSTOMER_STEPS_DDL = `
+  CREATE TABLE customer_steps (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    release_id INTEGER NOT NULL,
+    customer_id INTEGER NOT NULL,
+    template_id INTEGER,
+    name TEXT NOT NULL,
+    category TEXT NOT NULL CHECK(category IN ('deploy', 'verify')),
+    type TEXT NOT NULL CHECK(type IN ('bash', 'sql', 'rest', 'script', 'text')),
+    content TEXT NOT NULL,
+    order_index INTEGER NOT NULL,
+    status TEXT DEFAULT 'pending' CHECK(status IN ('pending', 'done', 'skipped', 'reverted')),
+    executed_at INTEGER,
+    executed_by TEXT,
+    skip_reason TEXT,
+    notes TEXT,
+    is_custom INTEGER DEFAULT 0,
+    is_overridden INTEGER DEFAULT 0,
+    created_at INTEGER DEFAULT (unixepoch() * 1000),
+    updated_at INTEGER DEFAULT (unixepoch() * 1000),
+    FOREIGN KEY (release_id) REFERENCES releases(id) ON DELETE CASCADE,
+    FOREIGN KEY (customer_id) REFERENCES customers(id) ON DELETE CASCADE,
+    FOREIGN KEY (template_id) REFERENCES step_templates(id) ON DELETE SET NULL,
+    UNIQUE(release_id, customer_id, template_id)
+  );
+`;
+
+// Migrate an existing SQLite database created with an older schema (idempotent)
+function migrateSqlite(client: Database.Database) {
+  // 1. Add step_templates.execution_config if missing
+  const columns = client.prepare('PRAGMA table_info(step_templates)').all() as { name: string }[];
+  if (!columns.some((c) => c.name === 'execution_config')) {
+    client.exec('ALTER TABLE step_templates ADD COLUMN execution_config TEXT');
+  }
+
+  // 2. Rebuild tables with stale CHECK constraints (missing 'rest'/'script' types)
+  const staleCheck = "CHECK(type IN ('bash', 'sql', 'text'))";
+  const ddlOf = (table: string) =>
+    (client.prepare('SELECT sql FROM sqlite_master WHERE name = ?').get(table) as { sql?: string } | undefined)?.sql || '';
+
+  const rebuilds: { table: string; ddl: string; columns: string }[] = [];
+  if (ddlOf('step_templates').includes(staleCheck)) {
+    rebuilds.push({
+      table: 'step_templates',
+      ddl: STEP_TEMPLATES_DDL,
+      columns: 'id, release_id, name, category, type, content, order_index, description, execution_config, created_at',
+    });
+  }
+  if (ddlOf('customer_steps').includes(staleCheck)) {
+    rebuilds.push({
+      table: 'customer_steps',
+      ddl: CUSTOMER_STEPS_DDL,
+      columns: 'id, release_id, customer_id, template_id, name, category, type, content, order_index, status, executed_at, executed_by, skip_reason, notes, is_custom, is_overridden, created_at, updated_at',
+    });
+  }
+
+  if (rebuilds.length > 0) {
+    client.pragma('foreign_keys = OFF');
+    try {
+      for (const { table, ddl, columns } of rebuilds) {
+        client.transaction(() => {
+          client.exec(`ALTER TABLE ${table} RENAME TO _${table}_old`);
+          client.exec(ddl);
+          client.exec(`INSERT INTO ${table} (${columns}) SELECT ${columns} FROM _${table}_old`);
+          client.exec(`DROP TABLE _${table}_old`);
+        })();
+      }
+    } finally {
+      client.pragma('foreign_keys = ON');
+    }
+  }
+}
 
 // Initialize database with migrations
 export async function initDb() {
@@ -231,6 +364,7 @@ export async function initDb() {
   } else {
     // Execute SQL for SQLite
     instance.client.exec(CREATE_TABLES_SQL);
+    migrateSqlite(instance.client);
     instance.client.exec(BACKFILL_SQL);
   }
 }
