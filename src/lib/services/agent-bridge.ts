@@ -77,6 +77,28 @@ export interface ScriptStreamChunk {
   data: string;
 }
 
+export interface ShellParams {
+  kubeContext?: string;
+  namespace: string;
+  podName: string;
+  containerName?: string;
+  shell?: 'sh' | 'bash';
+  cols?: number;
+  rows?: number;
+}
+
+export interface ShellCallbacks {
+  onOutput?: (data: string) => void;
+  onExit?: (code: number) => void;
+  onError?: (message: string) => void;
+}
+
+export interface ShellSession {
+  send(data: string): void;
+  resize(cols: number, rows: number): void;
+  close(): void;
+}
+
 export interface ExecutionResult {
   success: boolean;
   executionId: string;
@@ -327,6 +349,16 @@ class AgentBridge {
     return { promise: stream, cancel: () => stream.cancel() };
   }
 
+  /**
+   * Open an interactive shell session (WebSocket via extension)
+   */
+  openShell(params: ShellParams, callbacks: ShellCallbacks): ShellSession {
+    if (!this.isAvailable()) {
+      throw new Error('Agent extension not installed');
+    }
+    return window.rtAgent!.openShell(params, callbacks);
+  }
+
   destroy() {
     if (this.checkInterval) {
       clearInterval(this.checkInterval);
@@ -348,6 +380,7 @@ declare global {
         request: ExecutionRequest,
         onChunk: (chunk: ScriptStreamChunk) => void
       ): Promise<ExecutionResult> & { cancel(): void };
+      openShell(params: ShellParams, callbacks: ShellCallbacks): ShellSession;
       getStatus(): Promise<{ connected: boolean; version?: string; agentUrl?: string }>;
       ping(): Promise<ExecutionResult>;
     };

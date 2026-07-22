@@ -10,6 +10,9 @@ console.log('[RT:Content] Content script loaded on:', window.location.href);
 // Active streaming ports, keyed by request id
 const streamPorts = new Map();
 
+// Active shell ports, keyed by request id
+const shellPorts = new Map();
+
 // Listen for messages from the injected script (page context)
 window.addEventListener('message', async (event) => {
   // Only accept messages from the same window
@@ -96,6 +99,43 @@ window.addEventListener('message', async (event) => {
       const port = streamPorts.get(event.data.id);
       if (port) {
         streamPorts.delete(event.data.id);
+        port.disconnect();
+      }
+      break;
+    }
+
+    case 'RT_SHELL_OPEN': {
+      const port = chrome.runtime.connect({ name: 'rt-shell' });
+      shellPorts.set(event.data.id, port);
+
+      port.onMessage.addListener((msg) => {
+        window.postMessage({
+          type: 'RT_SHELL_MSG',
+          id: event.data.id,
+          msg: msg
+        }, '*');
+      });
+
+      port.postMessage({
+        action: 'open',
+        id: event.data.id,
+        params: event.data.params
+      });
+      break;
+    }
+
+    case 'RT_SHELL_SEND': {
+      const port = shellPorts.get(event.data.id);
+      if (port) {
+        port.postMessage({ action: 'send', payload: event.data.payload });
+      }
+      break;
+    }
+
+    case 'RT_SHELL_CLOSE': {
+      const port = shellPorts.get(event.data.id);
+      if (port) {
+        shellPorts.delete(event.data.id);
         port.disconnect();
       }
       break;

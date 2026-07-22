@@ -119,6 +119,56 @@ chrome.runtime.onConnect.addListener((port) => {
   });
 });
 
+// Handle interactive shell connections from content script (WebSocket relay)
+chrome.runtime.onConnect.addListener((port) => {
+  if (port.name !== 'rt-shell') return;
+
+  let ws = null;
+
+  const send = (obj) => {
+    try {
+      port.postMessage(obj);
+    } catch {
+      // Port already disconnected
+    }
+  };
+
+  port.onMessage.addListener((msg) => {
+    if (msg.action === 'open') {
+      const params = new URLSearchParams({
+        token: connectionState.token,
+        ...msg.params
+      });
+      const wsUrl = connectionState.agentUrl.replace(/^http/, 'ws') + '/ws/shell?' + params.toString();
+
+      console.log('[RT:Background] Opening shell WebSocket:', wsUrl.replace(/token=[^&]+/, 'token=***'));
+      ws = new WebSocket(wsUrl);
+
+      ws.onmessage = (event) => {
+        try {
+          send({ id: msg.id, ...JSON.parse(event.data) });
+        } catch {
+          // Skip malformed frame
+        }
+      };
+      ws.onerror = () => {
+        send({ id: msg.id, type: 'error', message: 'WebSocket connection failed. Is the agent running?' });
+      };
+      ws.onclose = (event) => {
+        if (!event.wasClean) {
+          send({ id: msg.id, type: 'error', message: `Connection closed unexpectedly (${event.code})` });
+        }
+      };
+    } else if (msg.action === 'send' && ws && ws.readyState === WebSocket.OPEN) {
+      ws.send(JSON.stringify(msg.payload));
+    }
+  });
+
+  port.onDisconnect.addListener(() => {
+    if (ws) ws.close();
+  });
+});
+
 async function handleMessage(request) {
   console.log('[RT:Background] Received action:', request.action);
   

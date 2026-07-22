@@ -14,6 +14,7 @@ import { ChevronDown, ChevronRight } from 'lucide-react';
 import type { PodInfo } from '@/lib/services/agent-bridge';
 import { formatRelativeTime, statusVariant } from '@/components/pods/pod-utils';
 import { ContainerCommandDialog } from '@/components/pods/container-command-dialog';
+import { ContainerShellDialog } from '@/components/pods/container-shell-dialog';
 
 interface PodTableProps {
   pods: PodInfo[];
@@ -129,12 +130,20 @@ export function PodTable({ pods, namespace, kubeContext }: PodTableProps) {
                               </TableCell>
                               {namespace && (
                                 <TableCell>
-                                  <ContainerCommandDialog
-                                    kubeContext={kubeContext}
-                                    namespace={namespace}
-                                    podName={pod.name}
-                                    containerName={container.name}
-                                  />
+                                  <div className="flex items-center">
+                                    <ContainerCommandDialog
+                                      kubeContext={kubeContext}
+                                      namespace={namespace}
+                                      podName={pod.name}
+                                      containerName={container.name}
+                                    />
+                                    <ContainerShellDialog
+                                      kubeContext={kubeContext}
+                                      namespace={namespace}
+                                      podName={pod.name}
+                                      containerName={container.name}
+                                    />
+                                  </div>
                                 </TableCell>
                               )}
                             </TableRow>

@@ -18,11 +18,13 @@
 
 const http = require('http');
 const { URL } = require('url');
+const { WebSocketServer } = require('ws');
 const { logger } = require('./src/utils/logger');
 const { SQLExecutor } = require('./src/executors/sql');
 const { RESTExecutor } = require('./src/executors/rest');
 const { ScriptExecutor } = require('./src/executors/script');
 const { PodsExecutor } = require('./src/executors/pods');
+const shell = require('./src/shell');
 
 const HOST = process.env.AGENT_HOST || '127.0.0.1';
 const PORT = process.env.AGENT_PORT || 3456;
@@ -261,17 +263,75 @@ server.listen(PORT, HOST, () => {
   logger.info('Supported execution types: sql, rest, script, pods');
 });
 
-// Graceful shutdown
-process.on('SIGTERM', () => {
-  logger.info('SIGTERM received, shutting down gracefully');
-  server.close(() => {
-    process.exit(0);
+// WebSocket endpoint for interactive shell sessions
+const wss = new WebSocketServer({ noServer: true });
+
+server.on('upgrade', (req, socket, head) => {
+  const url = new URL(req.url, `http://${req.headers.host}`);
+
+  if (url.pathname !== '/ws/shell') {
+    socket.destroy();
+    return;
+  }
+
+  // Auth via query param token
+  if (url.searchParams.get('token') !== TOKEN) {
+    logger.warn('Invalid token attempt (websocket)');
+    socket.write('HTTP/1.1 401 Unauthorized\r\n\r\n');
+    socket.destroy();
+    return;
+  }
+
+  wss.handleUpgrade(req, socket, head, (ws) => {
+    const params = {
+      kubeContext: url.searchParams.get('kubeContext') || undefined,
+      namespace: url.searchParams.get('namespace'),
+      pod: url.searchParams.get('pod'),
+      container: url.searchParams.get('container') || undefined,
+      shell: url.searchParams.get('shell') || 'bash',
+      cols: parseInt(url.searchParams.get('cols') || '80', 10) || 80,
+      rows: parseInt(url.searchParams.get('rows') || '24', 10) || 24
+    };
+    shell.handleConnection(ws, params);
   });
 });
 
-process.on('SIGINT', () => {
-  logger.info('SIGINT received, shutting down');
+// Track open connections so shutdown can destroy them — server.close()
+// alone waits indefinitely for keep-alive HTTP connections and WebSockets
+const openSockets = new Set();
+server.on('connection', (socket) => {
+  openSockets.add(socket);
+  socket.on('close', () => openSockets.delete(socket));
+});
+
+// Graceful shutdown: first signal tries a clean exit, second forces it
+let shuttingDown = false;
+
+function shutdown(signal) {
+  if (shuttingDown) {
+    logger.info(`${signal} received again, forcing exit`);
+    process.exit(0);
+  }
+  shuttingDown = true;
+
+  logger.info(`${signal} received, shutting down`);
+
+  // Close WebSocket server (terminates shell sessions, whose socket 'close'
+  // handlers kill their kubectl children)
+  wss.close();
+
+  // Destroy all open connections so server.close() can complete
+  for (const socket of openSockets) {
+    socket.destroy();
+  }
+
   server.close(() => {
     process.exit(0);
   });
-});
+
+  // Belt and braces: exit even if something still lingers
+  setTimeout(() => process.exit(0), 1000);
+}
+
+process.on('SIGTERM', () => shutdown('SIGTERM'));
+process.on('SIGINT', () => shutdown('SIGINT'));

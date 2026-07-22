@@ -198,6 +198,72 @@
       },
 
       /**
+       * Open an interactive shell session.
+       * params: { kubeContext?, namespace, podName, containerName?, shell?, cols?, rows? }
+       * callbacks: { onOutput(data), onExit(code), onError(message) }
+       * Returns { send(data), resize(cols, rows), close() }
+       */
+      openShell(params, callbacks) {
+        const id = generateId();
+
+        const handler = (event) => {
+          if (event.source !== window) return;
+          if (event.data?.type !== 'RT_SHELL_MSG') return;
+          if (event.data.id !== id) return;
+
+          const msg = event.data.msg || {};
+
+          if (msg.type === 'output') {
+            callbacks.onOutput && callbacks.onOutput(msg.data);
+          } else if (msg.type === 'exit') {
+            cleanup();
+            callbacks.onExit && callbacks.onExit(msg.code);
+          } else if (msg.type === 'error') {
+            callbacks.onError && callbacks.onError(msg.message);
+          }
+        };
+
+        const cleanup = () => {
+          window.removeEventListener('message', handler);
+          pendingRequests.delete(id);
+        };
+
+        window.addEventListener('message', handler);
+        pendingRequests.set(id, { handler });
+
+        window.postMessage({
+          type: 'RT_SHELL_OPEN',
+          id: id,
+          params: {
+            kubeContext: params.kubeContext,
+            namespace: params.namespace,
+            pod: params.podName,
+            container: params.containerName,
+            shell: params.shell || 'bash',
+            cols: params.cols || 80,
+            rows: params.rows || 24
+          }
+        }, '*');
+
+        return {
+          send: (data) => window.postMessage({
+            type: 'RT_SHELL_SEND',
+            id: id,
+            payload: { type: 'stdin', data: data }
+          }, '*'),
+          resize: (cols, rows) => window.postMessage({
+            type: 'RT_SHELL_SEND',
+            id: id,
+            payload: { type: 'resize', cols: cols, rows: rows }
+          }, '*'),
+          close: () => {
+            cleanup();
+            window.postMessage({ type: 'RT_SHELL_CLOSE', id: id }, '*');
+          }
+        };
+      },
+
+      /**
        * Simple ping to test connectivity
        */
       async ping() {
