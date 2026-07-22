@@ -6,6 +6,7 @@ import {
   stepTemplates, 
   customerSteps, 
   customers,
+  releaseCustomers,
   type ReleaseType,
   type ReleaseStatus,
 } from '@/lib/db/schema';
@@ -82,6 +83,15 @@ export async function activateRelease(id: number, customerIds?: number[]) {
   if (customerStepsToInsert.length > 0) {
     await db.insert(customerSteps).values(customerStepsToInsert);
   }
+
+  // Record enrollment in release_customers join table
+  const enrollmentRows = targetCustomers.map(customer => ({
+    releaseId: id,
+    customerId: customer.id,
+  }));
+  if (enrollmentRows.length > 0) {
+    await db.insert(releaseCustomers).values(enrollmentRows).onConflictDoNothing();
+  }
   
   await db.update(releases)
     .set({ status: 'active', updatedAt: new Date() })
@@ -141,6 +151,15 @@ export async function addCustomersToRelease(releaseId: number, customerIds: numb
   
   if (customerStepsToInsert.length > 0) {
     await db.insert(customerSteps).values(customerStepsToInsert);
+  }
+
+  // Record enrollment in release_customers join table
+  const enrollmentRows = newCustomers.map(customer => ({
+    releaseId: releaseId,
+    customerId: customer.id,
+  }));
+  if (enrollmentRows.length > 0) {
+    await db.insert(releaseCustomers).values(enrollmentRows).onConflictDoNothing();
   }
   
   revalidatePath(`/releases/${releaseId}`);

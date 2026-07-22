@@ -1,7 +1,7 @@
 'use server';
 
 import { db } from '@/lib/db';
-import { stepTemplates, customerSteps, type StepCategory, type StepType } from '@/lib/db/schema';
+import { stepTemplates, customerSteps, releases, releaseCustomers, type StepCategory, type StepType } from '@/lib/db/schema';
 import { eq, and } from 'drizzle-orm';
 import { revalidatePath } from 'next/cache';
 
@@ -17,7 +17,39 @@ export type StepTemplateInput = {
 
 export async function addStepTemplate(data: StepTemplateInput) {
   const [template] = await db.insert(stepTemplates).values(data).returning();
+
+  // If the release is active, propagate new step to all enrolled customers
+  const release = await db.query.releases.findFirst({
+    where: eq(releases.id, data.releaseId),
+    columns: { status: true },
+  });
+
+  if (release?.status === 'active') {
+    const enrolled = await db.query.releaseCustomers.findMany({
+      where: eq(releaseCustomers.releaseId, data.releaseId),
+    });
+
+    if (enrolled.length > 0) {
+      await db.insert(customerSteps).values(
+        enrolled.map(rc => ({
+          releaseId: data.releaseId,
+          customerId: rc.customerId,
+          templateId: template.id,
+          name: template.name,
+          category: template.category,
+          type: template.type,
+          content: template.content,
+          orderIndex: template.orderIndex,
+          status: 'pending' as const,
+          isCustom: false,
+          isOverridden: false,
+        }))
+      );
+    }
+  }
+
   revalidatePath(`/releases/${data.releaseId}/steps`);
+  revalidatePath(`/releases/${data.releaseId}`);
   return template;
 }
 
@@ -56,6 +88,7 @@ export async function updateStepTemplate(id: number, data: Partial<StepTemplateI
   }
   
   revalidatePath(`/releases/${template.releaseId}/steps`);
+  revalidatePath(`/releases/${template.releaseId}`);
   return updated;
 }
 
@@ -75,6 +108,7 @@ export async function deleteStepTemplate(id: number) {
   
   await db.delete(stepTemplates).where(eq(stepTemplates.id, id));
   revalidatePath(`/releases/${template.releaseId}/steps`);
+  revalidatePath(`/releases/${template.releaseId}`);
 }
 
 export async function reorderSteps(
@@ -114,6 +148,7 @@ export async function reorderSteps(
   }
   
   revalidatePath(`/releases/${releaseId}/steps`);
+  revalidatePath(`/releases/${releaseId}`);
 }
 
 export async function getStepTemplatesByRelease(releaseId: number) {

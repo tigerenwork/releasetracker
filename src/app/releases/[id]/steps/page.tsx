@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
-import { ArrowLeft, Plus, GripVertical, Trash2, FileText } from 'lucide-react';
+import { ArrowLeft, Plus, GripVertical, Trash2, FileText, Pencil } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -283,6 +283,7 @@ function StepList({ steps, category, releaseId, onUpdate }: StepListProps) {
                     step={step}
                     index={index}
                     onDelete={() => handleDeleteStep(step.id)}
+                    onUpdate={onUpdate}
                   />
                 ))}
               </div>
@@ -298,9 +299,11 @@ interface SortableStepItemProps {
   step: Step;
   index: number;
   onDelete: () => void;
+  onUpdate: () => void;
 }
 
-function SortableStepItem({ step, index, onDelete }: SortableStepItemProps) {
+function SortableStepItem({ step, index, onDelete, onUpdate }: SortableStepItemProps) {
+  const [isEditOpen, setIsEditOpen] = useState(false);
   const {
     attributes,
     listeners,
@@ -315,6 +318,27 @@ function SortableStepItem({ step, index, onDelete }: SortableStepItemProps) {
     transition,
     zIndex: isDragging ? 10 : 1,
   };
+
+  async function handleEditStep(formData: FormData) {
+    try {
+      const response = await fetch(`/api/steps/${step.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: formData.get('name'),
+          type: formData.get('type'),
+          content: formData.get('content'),
+          description: formData.get('description'),
+        }),
+      });
+      if (response.ok) {
+        setIsEditOpen(false);
+        onUpdate();
+      }
+    } catch (error) {
+      console.error(error);
+    }
+  }
 
   return (
     <div
@@ -344,6 +368,41 @@ function SortableStepItem({ step, index, onDelete }: SortableStepItemProps) {
           <p className="text-sm text-slate-500">{step.description}</p>
         )}
       </div>
+      <Dialog open={isEditOpen} onOpenChange={setIsEditOpen}>
+        <DialogTrigger asChild>
+          <Button variant="ghost" size="icon" className="h-8 w-8">
+            <Pencil className="w-4 h-4" />
+          </Button>
+        </DialogTrigger>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Edit Step</DialogTitle>
+          </DialogHeader>
+          <form action={handleEditStep} className="space-y-4 mt-4">
+            <div>
+              <label className="text-sm font-medium">Name</label>
+              <input name="name" defaultValue={step.name} className="w-full p-2 border rounded" required />
+            </div>
+            <div>
+              <label className="text-sm font-medium">Type</label>
+              <select name="type" defaultValue={step.type} className="w-full p-2 border rounded">
+                <option value="bash">Bash Script</option>
+                <option value="sql">SQL</option>
+                <option value="text">Text</option>
+              </select>
+            </div>
+            <div>
+              <label className="text-sm font-medium">Content</label>
+              <textarea name="content" defaultValue={step.content} className="w-full p-2 border rounded font-mono" rows={6} required />
+            </div>
+            <div>
+              <label className="text-sm font-medium">Description</label>
+              <input name="description" defaultValue={step.description ?? ''} className="w-full p-2 border rounded" />
+            </div>
+            <Button type="submit">Save Changes</Button>
+          </form>
+        </DialogContent>
+      </Dialog>
       <Button
         variant="ghost"
         size="icon"

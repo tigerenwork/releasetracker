@@ -3,8 +3,7 @@
 import { db } from '@/lib/db';
 import { 
   customerSteps, 
-  customers, 
-  clusters,
+  releaseCustomers,
   type StepCategory, 
   type StepType 
 } from '@/lib/db/schema';
@@ -62,14 +61,14 @@ export async function addCustomStep(
       description: null,
     }).returning();
     
-    // Add to ALL active customers
-    const allCustomers = await db.query.customers.findMany({
-      where: eq(customers.isActive, true),
+    // Add to all customers already enrolled in this release
+    const enrolled = await db.query.releaseCustomers.findMany({
+      where: eq(releaseCustomers.releaseId, releaseId),
     });
     
-    const stepsToInsert = allCustomers.map(customer => ({
+    const stepsToInsert = enrolled.map(rc => ({
       releaseId,
-      customerId: customer.id,
+      customerId: rc.customerId,
       templateId: template.id,
       ...stepData,
       status: 'pending' as const,

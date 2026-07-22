@@ -14,6 +14,12 @@ interface ReleaseMatrixClientProps {
   releaseId: number;
 }
 
+function getDeployStatus(customerSteps: any[]): { done: number; total: number } {
+  const deploySteps = customerSteps.filter((s: any) => s.category === 'deploy');
+  const done = deploySteps.filter((s: any) => s.status === 'done' || s.status === 'skipped').length;
+  return { done, total: deploySteps.length };
+}
+
 const statusIcons = {
   pending: <Circle className="w-5 h-5 text-slate-300" />,
   done: <CheckCircle className="w-5 h-5 text-green-500" />,
@@ -116,7 +122,9 @@ export function ReleaseMatrixClient({ stepsByCluster, category, releaseId }: Rel
     <>
       <div className="space-y-6">
         {clusters.map((clusterData: any) => {
-          const customers = Object.values(clusterData.customers);
+          const customers = Object.values(clusterData.customers).sort((a: any, b: any) =>
+            (a.customer.namespace || a.customer.name).localeCompare(b.customer.namespace || b.customer.name)
+          );
           
           // Get all unique steps for this category, sorted by orderIndex
           const allSteps = new Map();
@@ -150,11 +158,27 @@ export function ReleaseMatrixClient({ stepsByCluster, category, releaseId }: Rel
                   <table className="w-full">
                     <thead>
                       <tr className="border-b">
-                        <th className="text-left py-2 px-3 font-medium text-slate-500 w-48">Step</th>
+                        <th className="text-left py-2 px-3 font-medium text-slate-500 w-48 sticky left-0 z-20 bg-white after:absolute after:right-0 after:top-0 after:bottom-0 after:w-px after:bg-slate-200">Step</th>
                         {customers.map((customer: any) => (
                           <th key={customer.customer.id} className="text-center py-2 px-3 font-medium text-slate-500 min-w-[140px]">
                             <div>{customer.customer.name}</div>
                             <div className="text-xs text-slate-400 font-normal">{customer.customer.namespace}</div>
+                            {category === 'verify' && (() => {
+                              const { done, total } = getDeployStatus(customer.steps);
+                              const isFullyDeployed = total > 0 && done === total;
+                              const isPartial = total > 0 && done > 0 && done < total;
+                              return total > 0 ? (
+                                <div className={`mt-1 text-xs font-medium px-2 py-0.5 rounded-full inline-block ${
+                                  isFullyDeployed
+                                    ? 'bg-green-100 text-green-700'
+                                    : isPartial
+                                    ? 'bg-amber-100 text-amber-700'
+                                    : 'bg-slate-100 text-slate-500'
+                                }`}>
+                                  {isFullyDeployed ? '✓ Deployed' : `${done}/${total} deployed`}
+                                </div>
+                              ) : null;
+                            })()}
                             <div className="mt-2">
                               <AddCustomStepDialog
                                 releaseId={releaseId}
@@ -175,8 +199,8 @@ export function ReleaseMatrixClient({ stepsByCluster, category, releaseId }: Rel
                     </thead>
                     <tbody>
                       {steps.map((step: any, stepIndex: number) => (
-                        <tr key={step.id} className="border-b hover:bg-slate-50">
-                          <td className="py-3 px-3">
+                        <tr key={step.id} className="border-b hover:bg-slate-50 group">
+                          <td className="py-3 px-3 sticky left-0 z-10 bg-white group-hover:bg-slate-50 after:absolute after:right-0 after:top-0 after:bottom-0 after:w-px after:bg-slate-200">
                             <div className="flex items-center gap-2">
                               <span className="text-xs text-slate-400 w-6">{stepIndex + 1}.</span>
                               <div>
@@ -211,13 +235,19 @@ export function ReleaseMatrixClient({ stepsByCluster, category, releaseId }: Rel
                             
                             if (!customerStep) return <td key={customer.customer.id} className="py-2 px-3"></td>;
 
+                            const hasNotes = !!customerStep.notes;
+
                             return (
                               <td key={customer.customer.id} className="py-2 px-3 text-center">
                                 <button
                                   onClick={() => handleStepClick(customerStep, step.template)}
-                                  className="hover:scale-110 transition-transform"
+                                  className="relative inline-flex hover:scale-110 transition-transform"
+                                  title={hasNotes ? customerStep.notes : undefined}
                                 >
                                   {statusIcons[customerStep.status as keyof typeof statusIcons]}
+                                  {hasNotes && (
+                                    <span className="absolute -top-1 -right-1 w-2 h-2 bg-orange-400 rounded-full" />
+                                  )}
                                 </button>
                               </td>
                             );

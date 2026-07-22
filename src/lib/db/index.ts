@@ -178,6 +178,26 @@ const CREATE_TABLES_SQL = `
   CREATE INDEX IF NOT EXISTS idx_customer_steps_release ON customer_steps(release_id);
   CREATE INDEX IF NOT EXISTS idx_customer_steps_customer ON customer_steps(customer_id);
   CREATE INDEX IF NOT EXISTS idx_step_templates_release ON step_templates(release_id);
+
+  CREATE TABLE IF NOT EXISTS release_customers (
+    release_id INTEGER NOT NULL,
+    customer_id INTEGER NOT NULL,
+    enrolled_at INTEGER DEFAULT (unixepoch() * 1000),
+    PRIMARY KEY (release_id, customer_id),
+    FOREIGN KEY (release_id) REFERENCES releases(id) ON DELETE CASCADE,
+    FOREIGN KEY (customer_id) REFERENCES customers(id) ON DELETE CASCADE
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_release_customers_release ON release_customers(release_id);
+`;
+
+// Backfill SQL: populate release_customers from existing customer_steps for already-active releases
+const BACKFILL_SQL = `
+  INSERT OR IGNORE INTO release_customers (release_id, customer_id, enrolled_at)
+  SELECT DISTINCT cs.release_id, cs.customer_id, MIN(cs.created_at)
+  FROM customer_steps cs
+  WHERE cs.is_custom = 0
+  GROUP BY cs.release_id, cs.customer_id;
 `;
 
 // Initialize database with migrations
@@ -185,7 +205,7 @@ export async function initDb() {
   const instance = dbInstance || createDatabaseClient();
   
   if (instance.type === 'turso') {
-    // Execute SQL for Turso
+    // Execute CREATE TABLE statements for Turso
     const statements = CREATE_TABLES_SQL
       .split(';')
       .map(s => s.trim())
@@ -201,8 +221,16 @@ export async function initDb() {
         }
       }
     }
+
+    // Backfill release_customers from existing data
+    try {
+      await instance.client.execute(BACKFILL_SQL.trim());
+    } catch (error) {
+      console.error('Backfill error:', error);
+    }
   } else {
     // Execute SQL for SQLite
     instance.client.exec(CREATE_TABLES_SQL);
+    instance.client.exec(BACKFILL_SQL);
   }
 }

@@ -2,13 +2,22 @@ import Link from 'next/link';
 import { Plus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { CustomerCard } from '@/components/customers/customer-card';
+import { CustomerListItem } from '@/components/customers/customer-list-item';
+import { ViewToggle } from '@/components/customers/view-toggle';
 import { listClusters } from '@/lib/actions/clusters';
 import { listCustomers } from '@/lib/actions/customers';
 
 // Force dynamic rendering to avoid static generation during build
 export const dynamic = 'force-dynamic';
 
-export default async function CustomersPage() {
+interface CustomersPageProps {
+  searchParams: Promise<{ view?: string }>;
+}
+
+export default async function CustomersPage({ searchParams }: CustomersPageProps) {
+  const { view } = await searchParams;
+  const currentView: 'grid' | 'list' = view === 'list' ? 'list' : 'grid';
+
   const [customers, clusters] = await Promise.all([
     listCustomers(),
     listClusters(),
@@ -38,12 +47,15 @@ export default async function CustomersPage() {
             Manage your customers grouped by cluster
           </p>
         </div>
-        <Link href="/customers/new">
-          <Button>
-            <Plus className="w-4 h-4 mr-2" />
-            Add Customer
-          </Button>
-        </Link>
+        <div className="flex items-center gap-3">
+          <ViewToggle currentView={currentView} />
+          <Link href="/customers/new">
+            <Button>
+              <Plus className="w-4 h-4 mr-2" />
+              Add Customer
+            </Button>
+          </Link>
+        </div>
       </div>
 
       {customers.length === 0 ? (
@@ -64,11 +76,25 @@ export default async function CustomersPage() {
                   ({group.customers.length} customers)
                 </span>
               </h2>
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {group.customers.map((customer) => (
-                  <CustomerCard key={customer.id} customer={customer} />
-                ))}
-              </div>
+
+              {currentView === 'grid' ? (
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                  {group.customers.map((customer) => (
+                    <CustomerCard key={customer.id} customer={customer} />
+                  ))}
+                </div>
+              ) : (
+                <div className="rounded-lg border overflow-hidden">
+                  <div className="flex items-center gap-4 px-4 py-2 bg-slate-50 border-b text-xs font-medium text-slate-500 uppercase tracking-wide">
+                    <span className="flex-1">Name</span>
+                    <span className="w-40 hidden sm:block">Namespace</span>
+                    <span className="w-20 ml-auto">Actions</span>
+                  </div>
+                  {group.customers.map((customer) => (
+                    <CustomerListItem key={customer.id} customer={customer} />
+                  ))}
+                </div>
+              )}
             </div>
           ))}
         </div>
@@ -76,3 +102,4 @@ export default async function CustomersPage() {
     </div>
   );
 }
+
