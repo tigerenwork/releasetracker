@@ -12,7 +12,7 @@ interface ScriptStepExecutorProps {
   customerId: number;
   releaseId: number;
   content: string;
-  interpreter: 'bash' | 'python' | 'node';
+  interpreter: 'sh' | 'bash' | 'python' | 'node';
   config: {
     namespace: string;
     podSelector: string;

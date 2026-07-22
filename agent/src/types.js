@@ -5,7 +5,8 @@
  * @property {number} [clusterId]
  * @property {string} [kubeContext]
  * @property {string} namespace
- * @property {string} podSelector
+ * @property {string} [podSelector]
+ * @property {string} [podName]
  * @property {string} [containerName]
  * @property {number} stepId
  * @property {number} releaseId
@@ -25,7 +26,7 @@
  * @property {boolean} [expectJson]
  * 
  * @typedef {Object} ScriptExecutionConfig
- * @property {'bash'|'python'|'node'} interpreter
+ * @property {'sh'|'bash'|'python'|'node'} interpreter
  * @property {string} content
  * @property {Object} [environment]
  * @property {string} [workingDir]

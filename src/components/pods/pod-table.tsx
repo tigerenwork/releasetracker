@@ -13,11 +13,19 @@ import {
 import { ChevronDown, ChevronRight } from 'lucide-react';
 import type { PodInfo } from '@/lib/services/agent-bridge';
 import { formatRelativeTime, statusVariant } from '@/components/pods/pod-utils';
+import { ContainerCommandDialog } from '@/components/pods/container-command-dialog';
+
+interface PodTableProps {
+  pods: PodInfo[];
+  /** When provided, container rows get a "run command" action */
+  namespace?: string;
+  kubeContext?: string;
+}
 
 /**
  * Pod status table with expandable per-container details
  */
-export function PodTable({ pods }: { pods: PodInfo[] }) {
+export function PodTable({ pods, namespace, kubeContext }: PodTableProps) {
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
 
   const toggle = (podName: string) => {
@@ -87,6 +95,7 @@ export function PodTable({ pods }: { pods: PodInfo[] }) {
                             <TableHead>Restarts</TableHead>
                             <TableHead>Started</TableHead>
                             <TableHead>Last Terminated</TableHead>
+                            {namespace && <TableHead className="w-12">Run</TableHead>}
                           </TableRow>
                         </TableHeader>
                         <TableBody>
@@ -118,6 +127,16 @@ export function PodTable({ pods }: { pods: PodInfo[] }) {
                                     }`
                                   : '—'}
                               </TableCell>
+                              {namespace && (
+                                <TableCell>
+                                  <ContainerCommandDialog
+                                    kubeContext={kubeContext}
+                                    namespace={namespace}
+                                    podName={pod.name}
+                                    containerName={container.name}
+                                  />
+                                </TableCell>
+                              )}
                             </TableRow>
                           ))}
                         </TableBody>

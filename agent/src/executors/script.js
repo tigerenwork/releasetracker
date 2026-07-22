@@ -17,10 +17,15 @@ class ScriptExecutor {
     const startTime = Date.now();
 
     try {
-      // 1. Find target pod
-      logger.info(`[Script] Finding pod: context=${context.kubeContext || 'current'}, namespace=${context.namespace}, selector=${context.podSelector}`);
-      const podName = await this.findPod(context.namespace, context.podSelector, context.kubeContext);
-      logger.info(`[Script] Found pod: ${podName}`);
+      // 1. Find target pod (or use the pod specified directly)
+      let podName = context.podName;
+      if (podName) {
+        logger.info(`[Script] Using pod: ${podName} (namespace=${context.namespace})`);
+      } else {
+        logger.info(`[Script] Finding pod: context=${context.kubeContext || 'current'}, namespace=${context.namespace}, selector=${context.podSelector}`);
+        podName = await this.findPod(context.namespace, context.podSelector, context.kubeContext);
+        logger.info(`[Script] Found pod: ${podName}`);
+      }
 
       // 2. Prepare command
       const { command, args } = this.buildCommand(script);
@@ -46,6 +51,8 @@ class ScriptExecutor {
 
       const duration = Date.now() - startTime;
 
+      const MAX_OUTPUT = 50000;
+
       return {
         success: exitCode === 0,
         executionId: id,
@@ -54,8 +61,10 @@ class ScriptExecutor {
         duration,
         timestamp: new Date().toISOString(),
         script: {
-          stdout: stdout.slice(0, 10000),
-          stderr: stderr.slice(0, 10000),
+          stdout: stdout.slice(0, MAX_OUTPUT),
+          stderr: stderr.slice(0, MAX_OUTPUT),
+          stdoutTruncated: stdout.length > MAX_OUTPUT,
+          stderrTruncated: stderr.length > MAX_OUTPUT,
           exitCode,
           command: `${command} ${args.join(' ')}`
         },
@@ -89,6 +98,8 @@ class ScriptExecutor {
     const { interpreter } = script;
 
     switch (interpreter) {
+      case 'sh':
+        return { command: 'sh', args: [] };
       case 'bash':
         return { command: 'bash', args: [] };
       case 'python':

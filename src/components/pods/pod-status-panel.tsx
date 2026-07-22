@@ -90,7 +90,9 @@ export function PodStatusPanel({ namespace, podSelector, kubeContext }: PodStatu
           <p className="text-sm text-muted-foreground">No pods found.</p>
         )}
 
-        {pods.length > 0 && <PodTable pods={pods} />}
+        {pods.length > 0 && (
+          <PodTable pods={pods} namespace={namespace} kubeContext={kubeContext} />
+        )}
       </CardContent>
     </Card>
   );

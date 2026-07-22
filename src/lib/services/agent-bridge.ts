@@ -11,6 +11,7 @@ export interface ExecutionContext {
   kubeContext?: string;
   namespace: string;
   podSelector: string;
+  podName?: string;
   containerName?: string;
   stepId: number;
   releaseId: number;
@@ -33,7 +34,7 @@ export interface RESTExecutionConfig {
 }
 
 export interface ScriptExecutionConfig {
-  interpreter: 'bash' | 'python' | 'node';
+  interpreter: 'sh' | 'bash' | 'python' | 'node';
   content: string;
   environment?: Record<string, string>;
   workingDir?: string;
@@ -100,6 +101,8 @@ export interface ExecutionResult {
   script?: {
     stdout: string;
     stderr: string;
+    stdoutTruncated?: boolean;
+    stderrTruncated?: boolean;
     exitCode: number;
     command: string;
   };

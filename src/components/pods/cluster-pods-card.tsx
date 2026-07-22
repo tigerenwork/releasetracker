@@ -202,7 +202,11 @@ export function ClusterPodsCard({ clusterName, customers, releaseId }: ClusterPo
 
                   {isExpanded && hasPods && (
                     <div className="mt-2 ml-7">
-                      <PodTable pods={state.pods!} />
+                      <PodTable
+                        pods={state.pods!}
+                        namespace={customer.namespace}
+                        kubeContext={clusterName}
+                      />
                     </div>
                   )}
                 </div>
