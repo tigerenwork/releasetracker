@@ -150,7 +150,23 @@ export interface AgentStatus {
   connected: boolean;
   version?: string;
   agentUrl?: string;
+  /** true when the agent is older than MIN_AGENT_VERSION */
+  outdated?: boolean;
   error?: string;
+}
+
+/** Minimum agent version this web app requires */
+export const MIN_AGENT_VERSION = '1.1.0';
+
+/** Compare two semver-ish versions: -1 / 0 / 1 */
+function compareVersions(a: string, b: string): number {
+  const pa = a.split('.').map(Number);
+  const pb = b.split('.').map(Number);
+  for (let i = 0; i < 3; i++) {
+    const diff = (pa[i] || 0) - (pb[i] || 0);
+    if (diff !== 0) return diff < 0 ? -1 : 1;
+  }
+  return 0;
 }
 
 class AgentBridge {
@@ -217,6 +233,10 @@ class AgentBridge {
         connected: status.connected,
         version: status.version,
         agentUrl: status.agentUrl,
+        outdated:
+          status.connected && !!status.version
+            ? compareVersions(status.version, MIN_AGENT_VERSION) < 0
+            : false,
       });
     } catch (err) {
       this.setStatus({

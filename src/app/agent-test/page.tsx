@@ -12,7 +12,7 @@ import {
   TextStepDisplay,
 } from '@/components/executors';
 import { PodStatusPanel } from '@/components/pods/pod-status-panel';
-import { agentBridge, type AgentStatus } from '@/lib/services/agent-bridge';
+import { agentBridge, type AgentStatus, MIN_AGENT_VERSION } from '@/lib/services/agent-bridge';
 
 /**
  * POC Test Page for Agent Bridge
@@ -95,6 +95,11 @@ export default function AgentTestPage() {
                     ? `Connected (${agentStatus.version})` 
                     : 'Disconnected'}
                 </span>
+                {agentStatus.outdated && (
+                  <Badge variant="outline" className="bg-amber-50 text-amber-700 border-amber-200">
+                    Outdated — update to {MIN_AGENT_VERSION}+
+                  </Badge>
+                )}
               </div>
             )}
           </div>

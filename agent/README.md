@@ -1,55 +1,57 @@
-# Release Tracker Agent (POC)
+# Release Tracker Agent
 
-Local execution agent that receives commands from the browser extension and executes them.
+Local execution agent that receives commands from the browser extension and
+executes them via `kubectl` against Kubernetes clusters.
 
-## Quick Start
+## Quick Start (development)
 
 ```bash
-# Using default token
 cd agent
+npm install
 npm start
-
-# With custom token
-AGENT_TOKEN=my-secret-token npm start
-
-# With custom port
-AGENT_PORT=8080 npm start
 ```
 
-## Environment Variables
-
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `AGENT_PORT` | `3456` | HTTP server port |
-| `AGENT_TOKEN` | `poc-token-123` | Authentication token |
-| `LOG_LEVEL` | `info` | Logging level (error, warn, info, debug) |
-
-## API Endpoints
-
-### Health Check
-```bash
-curl http://127.0.0.1:3456/health
-```
-
-### Execute Command
-```bash
-curl -X POST http://127.0.0.1:3456/execute \
-  -H "Content-Type: application/json" \
-  -H "X-Agent-Token: poc-token-123" \
-  -d '{
-    "id": "exec-123",
-    "type": "bash",
-    "command": "echo hello",
-    "context": {"customerId": 1}
-  }'
-```
-
-## Docker (Optional)
+On first run a per-user auth token is generated into
+`~/.config/rt-agent/config.json`. Print it with:
 
 ```bash
-# Build image
-docker build -t release-tracker-agent .
-
-# Run container
-docker run -p 3456:3456 -e AGENT_TOKEN=my-token release-tracker-agent
+./bin/rt-agent.js token    # or: rt-agent token (when installed globally)
 ```
+
+Paste the token into the browser extension's settings.
+
+## CLI
+
+| Command | Description |
+|---------|-------------|
+| `rt-agent start` | Start the agent in the foreground |
+| `rt-agent install` | Register autostart (launchd / systemd user) and start |
+| `rt-agent uninstall` | Remove autostart registration |
+| `rt-agent token` | Print the auth token |
+| `rt-agent status` | Check whether the agent is running |
+
+## Configuration
+
+Precedence: environment variable → `~/.config/rt-agent/config.json` → default.
+
+| Setting | Env var | Default |
+|---------|---------|---------|
+| `host` | `AGENT_HOST` | `127.0.0.1` |
+| `port` | `AGENT_PORT` | `3456` |
+| `token` | `AGENT_TOKEN` | generated on first run |
+| — | `LOG_LEVEL` | `info` |
+
+## API
+
+- `GET /health` — status, version, uptime, `checks.kubectl` (no auth)
+- `POST /api/v1/execute` — one-shot execution (`sql`, `rest`, `script`, `pods`)
+- `POST /api/v1/execute/stream` — NDJSON streaming (`script`, `logs`)
+- `GET /ws/shell?...&token=` — WebSocket interactive shell
+
+All endpoints except `/health` require the `X-Agent-Token` header (or `?token=`
+for the WebSocket).
+
+## Distribution
+
+See [docs/AGENT-DISTRIBUTION.md](../docs/AGENT-DISTRIBUTION.md) for packaging,
+publishing, and operator setup.

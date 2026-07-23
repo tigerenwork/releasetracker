@@ -1,11 +1,25 @@
 {
-  "name": "release-tracker-agent",
-  "version": "1.0.0",
+  "name": "@tigerenwork/agent",
+  "version": "1.1.1",
   "description": "Local execution agent for Release Tracker",
   "main": "server.js",
+  "bin": {
+    "rt-agent": "bin/rt-agent.js"
+  },
+  "files": [
+    "bin/",
+    "src/",
+    "server.js"
+  ],
   "scripts": {
     "start": "node server.js",
     "dev": "node server.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "publishConfig": {
+    "registry": "https://npm.pkg.github.com"
   },
   "keywords": [
     "release-tracker",

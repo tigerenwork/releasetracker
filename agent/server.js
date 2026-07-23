@@ -26,11 +26,17 @@ const { ScriptExecutor } = require('./src/executors/script');
 const { PodsExecutor } = require('./src/executors/pods');
 const { LogsExecutor } = require('./src/executors/logs');
 const shell = require('./src/shell');
+const { loadConfig } = require('./src/config');
+const { version: VERSION } = require('./package.json');
 
-const HOST = process.env.AGENT_HOST || '127.0.0.1';
-const PORT = process.env.AGENT_PORT || 3456;
-const TOKEN = process.env.AGENT_TOKEN || 'poc-token-123';
-const LOG_LEVEL = process.env.LOG_LEVEL || 'info';
+const config = loadConfig();
+const HOST = config.host;
+const PORT = config.port;
+const TOKEN = config.token;
+
+// Preflight: kubectl must be available for any execution to work
+let kubectlAvailable = false;
+let kubectlError = null;
 
 // Initialize executors
 const sqlExecutor = new SQLExecutor();
@@ -62,9 +68,13 @@ const server = http.createServer((req, res) => {
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({
       status: 'healthy',
-      version: '1.1.0',
+      version: VERSION,
       timestamp: new Date().toISOString(),
-      uptime: process.uptime()
+      uptime: process.uptime(),
+      checks: {
+        kubectl: kubectlAvailable,
+        ...(kubectlError ? { kubectlError } : {})
+      }
     }));
     return;
   }
@@ -270,17 +280,40 @@ function handleCancel(req, res) {
   }
 }
 
+// Preflight check: verify kubectl is on PATH (runs once at startup)
+function checkKubectl() {
+  const { spawn } = require('child_process');
+  const child = spawn('kubectl', ['version', '--client', '-o', 'json']);
+  let stderr = '';
+  child.stderr.on('data', (d) => stderr += d.toString());
+  child.on('close', (code) => {
+    kubectlAvailable = code === 0;
+    if (!kubectlAvailable) {
+      kubectlError = stderr.trim() || `kubectl exited with code ${code}`;
+      logger.error(`[Preflight] kubectl check failed: ${kubectlError}`);
+    } else {
+      logger.info('[Preflight] kubectl is available');
+    }
+  });
+  child.on('error', () => {
+    kubectlAvailable = false;
+    kubectlError = 'kubectl not found on PATH';
+    logger.error('[Preflight] kubectl not found on PATH — executions will fail until it is installed');
+  });
+}
+
 server.listen(PORT, HOST, () => {
   console.log(`
 ╔════════════════════════════════════════════════════════╗
-║  Release Tracker Agent v1.1.0                          ║
+║  Release Tracker Agent v${VERSION}                          ║
 ╠════════════════════════════════════════════════════════╣
 ║  URL:    http://${HOST}:${PORT}                        ║
-║  Token:  ${TOKEN}                    ║
+║  Token:  (run \`rt-agent token\` to view)              ║
 ╚════════════════════════════════════════════════════════╝
   `);
   logger.info('Agent started and ready for connections');
   logger.info('Supported execution types: sql, rest, script, pods');
+  checkKubectl();
 });
 
 // WebSocket endpoint for interactive shell sessions
