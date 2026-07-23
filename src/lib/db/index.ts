@@ -287,6 +287,28 @@ const CUSTOMER_STEPS_DDL = `
   );
 `;
 
+// A column DEFAULT on execution_config (e.g. from `DEFAULT "execution_config"`)
+// makes every pre-existing row read a non-JSON string and breaks JSON parsing
+const BAD_EXECUTION_CONFIG_DEFAULT = /execution_config[^,)]*DEFAULT/i;
+const STALE_TYPE_CHECK = "CHECK(type IN ('bash', 'sql', 'text'))";
+
+const STEP_TEMPLATES_COLS =
+  'id, release_id, name, category, type, content, order_index, description, execution_config, created_at';
+const STEP_TEMPLATES_SELECT_COLS =
+  "id, release_id, name, category, type, content, order_index, description, NULLIF(execution_config, 'execution_config'), created_at";
+const CUSTOMER_STEPS_COLS =
+  'id, release_id, customer_id, template_id, name, category, type, content, order_index, status, executed_at, executed_by, skip_reason, notes, is_custom, is_overridden, created_at, updated_at';
+
+function rebuildPlanFor(table: string, ddl: string) {
+  if (table === 'step_templates' && (ddl.includes(STALE_TYPE_CHECK) || BAD_EXECUTION_CONFIG_DEFAULT.test(ddl))) {
+    return { table, ddl: STEP_TEMPLATES_DDL, insertCols: STEP_TEMPLATES_COLS, selectCols: STEP_TEMPLATES_SELECT_COLS };
+  }
+  if (table === 'customer_steps' && ddl.includes(STALE_TYPE_CHECK)) {
+    return { table, ddl: CUSTOMER_STEPS_DDL, insertCols: CUSTOMER_STEPS_COLS, selectCols: CUSTOMER_STEPS_COLS };
+  }
+  return null;
+}
+
 // Migrate an existing SQLite database created with an older schema (idempotent)
 function migrateSqlite(client: Database.Database) {
   // 1. Add step_templates.execution_config if missing
@@ -295,40 +317,69 @@ function migrateSqlite(client: Database.Database) {
     client.exec('ALTER TABLE step_templates ADD COLUMN execution_config TEXT');
   }
 
-  // 2. Rebuild tables with stale CHECK constraints (missing 'rest'/'script' types)
-  const staleCheck = "CHECK(type IN ('bash', 'sql', 'text'))";
+  // 2. Clean up non-JSON values stored in the JSON column
+  client.exec(`UPDATE step_templates SET execution_config = NULL WHERE execution_config = 'execution_config'`);
+
+  // 3. Rebuild tables with stale CHECK constraints or a bad column DEFAULT
   const ddlOf = (table: string) =>
     (client.prepare('SELECT sql FROM sqlite_master WHERE name = ?').get(table) as { sql?: string } | undefined)?.sql || '';
 
-  const rebuilds: { table: string; ddl: string; columns: string }[] = [];
-  if (ddlOf('step_templates').includes(staleCheck)) {
-    rebuilds.push({
-      table: 'step_templates',
-      ddl: STEP_TEMPLATES_DDL,
-      columns: 'id, release_id, name, category, type, content, order_index, description, execution_config, created_at',
-    });
-  }
-  if (ddlOf('customer_steps').includes(staleCheck)) {
-    rebuilds.push({
-      table: 'customer_steps',
-      ddl: CUSTOMER_STEPS_DDL,
-      columns: 'id, release_id, customer_id, template_id, name, category, type, content, order_index, status, executed_at, executed_by, skip_reason, notes, is_custom, is_overridden, created_at, updated_at',
-    });
-  }
+  const rebuilds = [rebuildPlanFor('step_templates', ddlOf('step_templates')), rebuildPlanFor('customer_steps', ddlOf('customer_steps'))]
+    .filter((r): r is NonNullable<typeof r> => r !== null);
 
   if (rebuilds.length > 0) {
     client.pragma('foreign_keys = OFF');
     try {
-      for (const { table, ddl, columns } of rebuilds) {
+      for (const { table, ddl, insertCols, selectCols } of rebuilds) {
         client.transaction(() => {
           client.exec(`ALTER TABLE ${table} RENAME TO _${table}_old`);
           client.exec(ddl);
-          client.exec(`INSERT INTO ${table} (${columns}) SELECT ${columns} FROM _${table}_old`);
+          client.exec(`INSERT INTO ${table} (${insertCols}) SELECT ${selectCols} FROM _${table}_old`);
           client.exec(`DROP TABLE _${table}_old`);
         })();
       }
     } finally {
       client.pragma('foreign_keys = ON');
+    }
+  }
+}
+
+// Same migration for Turso (libsql client), also idempotent
+async function migrateTurso(client: ReturnType<typeof createClient>) {
+  // 1. Add step_templates.execution_config if missing
+  const columns = await client.execute('PRAGMA table_info(step_templates)');
+  if (!columns.rows.some((c) => c.name === 'execution_config')) {
+    await client.execute('ALTER TABLE step_templates ADD COLUMN execution_config TEXT');
+  }
+
+  // 2. Clean up non-JSON values stored in the JSON column
+  await client.execute(`UPDATE step_templates SET execution_config = NULL WHERE execution_config = 'execution_config'`);
+
+  // 3. Rebuild tables with stale CHECK constraints or a bad column DEFAULT
+  const ddlOf = async (table: string) => {
+    const rs = await client.execute({ sql: 'SELECT sql FROM sqlite_master WHERE name = ?', args: [table] });
+    return (rs.rows[0]?.sql as string | undefined) || '';
+  };
+
+  const rebuilds = [
+    rebuildPlanFor('step_templates', await ddlOf('step_templates')),
+    rebuildPlanFor('customer_steps', await ddlOf('customer_steps')),
+  ].filter((r): r is NonNullable<typeof r> => r !== null);
+
+  for (const { table, ddl, insertCols, selectCols } of rebuilds) {
+    await client.execute('PRAGMA foreign_keys = OFF');
+    try {
+      await client.batch(
+        [
+          `ALTER TABLE ${table} RENAME TO _${table}_old`,
+          ddl,
+          `INSERT INTO ${table} (${insertCols}) SELECT ${selectCols} FROM _${table}_old`,
+          `DROP TABLE _${table}_old`,
+        ],
+        'write'
+      );
+    } finally {
+      await client.execute('PRAGMA foreign_keys = ON');
     }
   }
 }
@@ -354,6 +405,9 @@ export async function initDb() {
         }
       }
     }
+
+    // Bring existing Turso databases up to the current schema
+    await migrateTurso(instance.client);
 
     // Backfill release_customers from existing data
     try {
