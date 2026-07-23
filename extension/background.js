@@ -15,26 +15,45 @@ let connectionState = {
   lastChecked: null
 };
 
+// Tracks whether settings have been hydrated from chrome.storage.local in this
+// worker lifetime. An MV3 service worker is stopped after ~30s of idleness and
+// re-spun on the next message, resetting module state (including
+// connectionState.token) to null. onStartup/onInstalled do NOT fire on a
+// wake, so we must lazily reload settings before issuing any authenticated
+// request — otherwise we send `X-Agent-Token: null` and the agent returns 401.
+let settingsLoaded = false;
+
+/**
+ * Ensure connectionState is hydrated from chrome.storage.local before any
+ * request that depends on it. Safe to call repeatedly — it only hits storage
+ * once per worker lifetime (or after settings are explicitly invalidated).
+ */
+async function ensureSettings() {
+  if (settingsLoaded) return;
+  const saved = await chrome.storage.local.get(['agentUrl', 'token']);
+  connectionState.agentUrl = saved.agentUrl || DEFAULT_AGENT_URL;
+  connectionState.token = saved.token || null;
+  settingsLoaded = true;
+}
+
 // Initialize
 chrome.runtime.onStartup.addListener(init);
 chrome.runtime.onInstalled.addListener(init);
 
 async function init() {
   console.log('[RT:Background] Initializing...');
-  
+
   // Load saved settings
-  const saved = await chrome.storage.local.get(['agentUrl', 'token']);
-  connectionState.agentUrl = saved.agentUrl || DEFAULT_AGENT_URL;
-  connectionState.token = saved.token || 'poc-token-123';
-  
+  await ensureSettings();
+
   console.log('[RT:Background] Loaded settings:', {
     agentUrl: connectionState.agentUrl,
     hasToken: !!connectionState.token
   });
-  
+
   // Check initial connection
   await checkConnection();
-  
+
   console.log('[RT:Background] Initialized, agent:', connectionState.agentUrl);
 }
 
@@ -66,6 +85,7 @@ chrome.runtime.onConnect.addListener((port) => {
     };
 
     try {
+      await ensureSettings();
       if (!connectionState.connected) {
         await checkConnection();
       }
@@ -133,8 +153,9 @@ chrome.runtime.onConnect.addListener((port) => {
     }
   };
 
-  port.onMessage.addListener((msg) => {
+  port.onMessage.addListener(async (msg) => {
     if (msg.action === 'open') {
+      await ensureSettings();
       const params = new URLSearchParams({
         token: connectionState.token,
         ...msg.params
@@ -182,6 +203,7 @@ async function handleMessage(request) {
     case 'updateSettings':
       connectionState.agentUrl = request.agentUrl || connectionState.agentUrl;
       connectionState.token = request.token || connectionState.token;
+      settingsLoaded = true;
       await chrome.storage.local.set({
         agentUrl: connectionState.agentUrl,
         token: connectionState.token
@@ -197,6 +219,7 @@ async function handleMessage(request) {
  * Check connection to agent
  */
 async function checkConnection() {
+  await ensureSettings();
   console.log('[RT:Background] Checking connection to:', connectionState.agentUrl);
   
   try {
@@ -245,6 +268,7 @@ async function checkConnection() {
  * Execute command on agent
  */
 async function executeCommand(request, id) {
+  await ensureSettings();
   if (!connectionState.connected) {
     // Try to reconnect
     const status = await checkConnection();
