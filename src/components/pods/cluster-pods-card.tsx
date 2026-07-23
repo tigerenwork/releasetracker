@@ -189,18 +189,21 @@ export function ClusterPodsCard({ clusterName, customers, releaseId = 0 }: Clust
 
               return (
                 <div key={customer.id} className="py-2">
-                  <div className="flex items-center gap-3">
-                    <button
-                      onClick={() => toggleExpanded(customer.id)}
-                      disabled={!hasPods}
-                      className="text-slate-400 disabled:opacity-30"
+                  <div
+                    className={`flex items-center gap-3 rounded-md -mx-2 px-2 py-1 -my-1 ${
+                      hasPods ? 'cursor-pointer hover:bg-slate-50' : ''
+                    }`}
+                    onClick={() => hasPods && toggleExpanded(customer.id)}
+                  >
+                    <span
+                      className={`text-slate-400 ${hasPods ? '' : 'opacity-30'}`}
                     >
                       {isExpanded ? (
                         <ChevronDown className="h-4 w-4" />
                       ) : (
                         <ChevronRight className="h-4 w-4" />
                       )}
-                    </button>
+                    </span>
                     <div className="w-48">
                       <div className="text-sm font-medium">{customer.name}</div>
                       <div className="text-xs text-slate-400 font-mono">{customer.namespace}</div>
@@ -209,7 +212,10 @@ export function ClusterPodsCard({ clusterName, customers, releaseId = 0 }: Clust
                     <Button
                       variant="ghost"
                       size="sm"
-                      onClick={() => refreshCustomer(customer)}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        refreshCustomer(customer);
+                      }}
                       disabled={state?.status === 'loading' || isRefreshingAll}
                     >
                       {state?.status === 'loading' ? (

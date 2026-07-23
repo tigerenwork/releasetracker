@@ -58,20 +58,20 @@ export function PodTable({ pods, namespace, kubeContext }: PodTableProps) {
 
           return (
             <Fragment key={pod.name}>
-              <TableRow>
+              <TableRow
+                className={containers.length > 0 ? 'cursor-pointer' : ''}
+                onClick={() => containers.length > 0 && toggle(pod.name)}
+              >
                 <TableCell className="w-8 pr-0">
-                  <button
-                    onClick={() => toggle(pod.name)}
-                    disabled={containers.length === 0}
-                    className="text-slate-400 disabled:opacity-30"
-                    title={isExpanded ? 'Hide containers' : 'Show containers'}
+                  <span
+                    className={`text-slate-400 ${containers.length === 0 ? 'opacity-30' : ''}`}
                   >
                     {isExpanded ? (
                       <ChevronDown className="h-4 w-4" />
                     ) : (
                       <ChevronRight className="h-4 w-4" />
                     )}
-                  </button>
+                  </span>
                 </TableCell>
                 <TableCell className="font-mono text-xs">{pod.name}</TableCell>
                 <TableCell>
