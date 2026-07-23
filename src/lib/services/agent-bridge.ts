@@ -45,6 +45,27 @@ export interface LogsExecutionConfig {
   timestamps?: boolean;
 }
 
+export interface PortForwardRequest {
+  kubeContext?: string;
+  namespace: string;
+  /** e.g. "service/cronicle" or "pod/my-pod" */
+  resource: string;
+  localPort: number;
+  remotePort: number;
+}
+
+export interface PortForwardInfo {
+  id: string;
+  kubeContext?: string;
+  namespace: string;
+  resource: string;
+  localPort: number;
+  remotePort: number;
+  status: 'starting' | 'ready' | 'failed';
+  startedAt: string;
+  error?: string;
+}
+
 export interface ExecutionRequest {
   id: string;
   type: 'sql' | 'rest' | 'script' | 'pods' | 'logs';
@@ -158,6 +179,9 @@ export interface AgentStatus {
 /** Minimum agent version this web app requires */
 export const MIN_AGENT_VERSION = '1.1.0';
 
+/** Minimum agent version that supports port-forward proxies */
+export const PORT_FORWARD_MIN_VERSION = '1.2.0';
+
 /** Compare two semver-ish versions: -1 / 0 / 1 */
 function compareVersions(a: string, b: string): number {
   const pa = a.split('.').map(Number);
@@ -167,6 +191,11 @@ function compareVersions(a: string, b: string): number {
     if (diff !== 0) return diff < 0 ? -1 : 1;
   }
   return 0;
+}
+
+/** True when the connected agent supports port-forward proxies */
+export function supportsPortForward(version?: string): boolean {
+  return !!version && compareVersions(version, PORT_FORWARD_MIN_VERSION) >= 0;
 }
 
 class AgentBridge {
@@ -412,6 +441,38 @@ class AgentBridge {
     return window.rtAgent!.openShell(params, callbacks);
   }
 
+  /**
+   * Start a kubectl port-forward proxy on the agent
+   */
+  async startPortForward(request: PortForwardRequest): Promise<PortForwardInfo> {
+    if (!this.isAvailable()) {
+      throw new Error('Agent extension not installed');
+    }
+    const result = await window.rtAgent!.portForward('start', request);
+    return (result as { forward: PortForwardInfo }).forward;
+  }
+
+  /**
+   * Stop a port-forward proxy by id
+   */
+  async stopPortForward(id: string): Promise<void> {
+    if (!this.isAvailable()) {
+      throw new Error('Agent extension not installed');
+    }
+    await window.rtAgent!.portForward('stop', { id });
+  }
+
+  /**
+   * List active port-forward proxies on the agent
+   */
+  async listPortForwards(): Promise<PortForwardInfo[]> {
+    if (!this.isAvailable()) {
+      throw new Error('Agent extension not installed');
+    }
+    const result = await window.rtAgent!.portForward('list');
+    return (result as { forwards: PortForwardInfo[] }).forwards;
+  }
+
   destroy() {
     if (this.checkInterval) {
       clearInterval(this.checkInterval);
@@ -434,6 +495,9 @@ declare global {
         onChunk: (chunk: ScriptStreamChunk) => void
       ): Promise<ExecutionResult> & { cancel(): void };
       openShell(params: ShellParams, callbacks: ShellCallbacks): ShellSession;
+      portForward(op: 'start', params: PortForwardRequest): Promise<unknown>;
+      portForward(op: 'stop', params: { id: string }): Promise<unknown>;
+      portForward(op: 'list', params?: Record<string, never>): Promise<unknown>;
       getStatus(): Promise<{ connected: boolean; version?: string; agentUrl?: string }>;
       ping(): Promise<ExecutionResult>;
     };

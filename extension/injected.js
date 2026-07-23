@@ -265,6 +265,47 @@
       },
 
       /**
+       * Port-forward operations through the agent.
+       * op: 'start' (params: { kubeContext?, namespace, resource, localPort, remotePort }),
+       *     'stop'  (params: { id }),
+       *     'list'  (no params)
+       */
+      async portForward(op, params = {}) {
+        return new Promise((resolve, reject) => {
+          const id = generateId();
+          const timeout = setTimeout(() => {
+            pendingRequests.delete(id);
+            reject(new Error('Port-forward request timeout'));
+          }, 10000);
+
+          const handler = (event) => {
+            if (event.source !== window) return;
+            if (event.data?.type !== 'RT_PORT_FORWARD_RESPONSE') return;
+            if (event.data.id !== id) return;
+
+            clearTimeout(timeout);
+            window.removeEventListener('message', handler);
+            pendingRequests.delete(id);
+
+            if (event.data.success) {
+              resolve(event.data.result);
+            } else {
+              reject(new Error(event.data.error || 'Port-forward request failed'));
+            }
+          };
+
+          window.addEventListener('message', handler);
+          pendingRequests.set(id, { handler, timeout });
+
+          window.postMessage({
+            type: 'RT_PORT_FORWARD',
+            id: id,
+            payload: { op, params }
+          }, '*');
+        });
+      },
+
+      /**
        * Simple ping to test connectivity
        */
       async ping() {

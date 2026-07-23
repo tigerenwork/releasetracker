@@ -25,6 +25,7 @@ const { RESTExecutor } = require('./src/executors/rest');
 const { ScriptExecutor } = require('./src/executors/script');
 const { PodsExecutor } = require('./src/executors/pods');
 const { LogsExecutor } = require('./src/executors/logs');
+const { PortForwardManager } = require('./src/executors/portforward');
 const shell = require('./src/shell');
 const { loadConfig } = require('./src/config');
 const { version: VERSION } = require('./package.json');
@@ -44,6 +45,7 @@ const restExecutor = new RESTExecutor();
 const scriptExecutor = new ScriptExecutor();
 const podsExecutor = new PodsExecutor();
 const logsExecutor = new LogsExecutor();
+const portForwardManager = new PortForwardManager();
 
 // Store active executions
 const activeExecutions = new Map();
@@ -51,7 +53,7 @@ const activeExecutions = new Map();
 const server = http.createServer((req, res) => {
   // Enable CORS for extension
   res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, DELETE, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, X-Agent-Token');
 
   if (req.method === 'OPTIONS') {
@@ -94,6 +96,20 @@ const server = http.createServer((req, res) => {
   // Cancel endpoint
   if (url.pathname.startsWith('/api/v1/execute/') && url.pathname.endsWith('/cancel') && req.method === 'POST') {
     handleCancel(req, res);
+    return;
+  }
+
+  // Port-forward endpoints
+  if (url.pathname === '/api/v1/portforward' && req.method === 'GET') {
+    handlePortForwardList(req, res);
+    return;
+  }
+  if (url.pathname === '/api/v1/portforward' && req.method === 'POST') {
+    handlePortForwardStart(req, res);
+    return;
+  }
+  if (url.pathname.startsWith('/api/v1/portforward/') && req.method === 'DELETE') {
+    handlePortForwardStop(req, res);
     return;
   }
 
@@ -280,6 +296,61 @@ function handleCancel(req, res) {
   }
 }
 
+function checkToken(req, res) {
+  if (req.headers['x-agent-token'] !== TOKEN) {
+    logger.warn('Invalid token attempt');
+    res.writeHead(401, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ error: 'Invalid token' }));
+    return false;
+  }
+  return true;
+}
+
+function handlePortForwardList(req, res) {
+  if (!checkToken(req, res)) return;
+
+  res.writeHead(200, { 'Content-Type': 'application/json' });
+  res.end(JSON.stringify({ forwards: portForwardManager.list() }));
+}
+
+function handlePortForwardStart(req, res) {
+  if (!checkToken(req, res)) return;
+
+  let body = '';
+  req.on('data', chunk => body += chunk);
+  req.on('end', () => {
+    try {
+      const data = JSON.parse(body);
+      const entry = portForwardManager.start(data);
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ success: true, forward: entry }));
+    } catch (err) {
+      logger.error('[PortForward] Start failed:', err.message);
+      res.writeHead(400, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({
+        success: false,
+        error: { code: 'PORT_FORWARD_FAILED', message: err.message }
+      }));
+    }
+  });
+}
+
+function handlePortForwardStop(req, res) {
+  if (!checkToken(req, res)) return;
+
+  const url = new URL(req.url, `http://${req.headers.host}`);
+  const id = decodeURIComponent(url.pathname.split('/')[4] || '');
+
+  try {
+    portForwardManager.stop(id);
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ success: true, message: 'Port-forward stopped' }));
+  } catch (err) {
+    res.writeHead(404, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ success: false, error: { code: 'NOT_FOUND', message: err.message } }));
+  }
+}
+
 // Preflight check: verify kubectl is on PATH (runs once at startup)
 function checkKubectl() {
   const { spawn } = require('child_process');
@@ -312,7 +383,7 @@ server.listen(PORT, HOST, () => {
 ╚════════════════════════════════════════════════════════╝
   `);
   logger.info('Agent started and ready for connections');
-  logger.info('Supported execution types: sql, rest, script, pods');
+  logger.info('Supported execution types: sql, rest, script, pods, portforward');
   checkKubectl();
 });
 
@@ -368,6 +439,9 @@ function shutdown(signal) {
   shuttingDown = true;
 
   logger.info(`${signal} received, shutting down`);
+
+  // Kill any running port-forward proxies
+  portForwardManager.stopAll();
 
   // Close WebSocket server (terminates shell sessions, whose socket 'close'
   // handlers kill their kubectl children)

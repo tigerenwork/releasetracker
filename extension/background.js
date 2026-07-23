@@ -199,6 +199,9 @@ async function handleMessage(request) {
       
     case 'execute':
       return await executeCommand(request.request, request.id);
+
+    case 'portforward':
+      return await portForwardCommand(request.op, request.params);
       
     case 'updateSettings':
       connectionState.agentUrl = request.agentUrl || connectionState.agentUrl;
@@ -297,6 +300,59 @@ async function executeCommand(request, id) {
     throw new Error(`Agent error: ${error}`);
   }
   
+  const data = await response.json();
+  return { success: true, data };
+}
+
+/**
+ * Port-forward operations on agent (start / stop / list)
+ */
+async function portForwardCommand(op, params) {
+  await ensureSettings();
+  if (!connectionState.connected) {
+    const status = await checkConnection();
+    if (!status.connected) {
+      throw new Error('Agent not connected. Is it running?');
+    }
+  }
+
+  let url = `${connectionState.agentUrl}/api/v1/portforward`;
+  let method = 'GET';
+  let body = null;
+
+  if (op === 'start') {
+    method = 'POST';
+    body = JSON.stringify(params);
+  } else if (op === 'stop') {
+    method = 'DELETE';
+    url += `/${encodeURIComponent(params.id)}`;
+  } else if (op !== 'list') {
+    throw new Error(`Unknown port-forward op: ${op}`);
+  }
+
+  const response = await fetch(url, {
+    method,
+    headers: {
+      'Content-Type': 'application/json',
+      'X-Agent-Token': connectionState.token
+    },
+    body
+  });
+
+  if (!response.ok) {
+    if (response.status === 401) {
+      throw new Error('Authentication failed. Check your token.');
+    }
+    let message = `Agent error: HTTP ${response.status}`;
+    try {
+      const errData = await response.json();
+      if (errData?.error?.message) message = errData.error.message;
+    } catch {
+      // Keep generic message
+    }
+    throw new Error(message);
+  }
+
   const data = await response.json();
   return { success: true, data };
 }

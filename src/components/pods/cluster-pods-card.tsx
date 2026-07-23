@@ -8,6 +8,7 @@ import { ChevronDown, ChevronRight, Loader2, RefreshCw } from 'lucide-react';
 import { agentBridge, type PodInfo } from '@/lib/services/agent-bridge';
 import { formatRelativeTime, isUnhealthy } from '@/components/pods/pod-utils';
 import { PodTable } from '@/components/pods/pod-table';
+import { PortForwardPanel } from '@/components/pods/port-forward-panel';
 
 interface ClusterPodsCardProps {
   clusterName: string;
@@ -152,19 +153,22 @@ export function ClusterPodsCard({ clusterName, customers, releaseId = 0 }: Clust
             {clusterName}
             <span className="text-sm font-normal text-slate-500">Customer Pods</span>
           </span>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={refreshAll}
-            disabled={isRefreshingAll || !extensionAvailable}
-          >
-            {isRefreshingAll ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
-            ) : (
-              <RefreshCw className="h-4 w-4" />
-            )}
-            <span className="ml-2">Refresh All</span>
-          </Button>
+          <div className="flex items-center gap-2">
+            <PortForwardPanel clusterName={clusterName} compact />
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={refreshAll}
+              disabled={isRefreshingAll || !extensionAvailable}
+            >
+              {isRefreshingAll ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <RefreshCw className="h-4 w-4" />
+              )}
+              <span className="ml-2">Refresh All</span>
+            </Button>
+          </div>
         </CardTitle>
       </CardHeader>
 

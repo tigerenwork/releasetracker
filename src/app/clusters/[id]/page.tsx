@@ -1,9 +1,10 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
-import { ArrowLeft, Server, Users } from 'lucide-react';
+import { ArrowLeft, Cable, Server, Users } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { getClusterWithCustomers } from '@/lib/actions/clusters';
+import { PortForwardPanel } from '@/components/pods/port-forward-panel';
 
 interface ClusterDetailPageProps {
   params: Promise<{
@@ -98,6 +99,18 @@ export default async function ClusterDetailPage({ params }: ClusterDetailPagePro
           </CardContent>
         </Card>
       </div>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Cable className="w-5 h-5" />
+            Connections
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <PortForwardPanel clusterName={cluster.name} />
+        </CardContent>
+      </Card>
     </div>
   );
 }

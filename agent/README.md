@@ -47,6 +47,9 @@ Precedence: environment variable → `~/.config/rt-agent/config.json` → defaul
 - `POST /api/v1/execute` — one-shot execution (`sql`, `rest`, `script`, `pods`)
 - `POST /api/v1/execute/stream` — NDJSON streaming (`script`, `logs`)
 - `GET /ws/shell?...&token=` — WebSocket interactive shell
+- `GET /api/v1/portforward` — list active port-forward proxies
+- `POST /api/v1/portforward` — start a proxy (`{ kubeContext?, namespace, resource, localPort, remotePort }`)
+- `DELETE /api/v1/portforward/:id` — stop a proxy
 
 All endpoints except `/health` require the `X-Agent-Token` header (or `?token=`
 for the WebSocket).

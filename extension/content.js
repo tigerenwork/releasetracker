@@ -70,6 +70,32 @@ window.addEventListener('message', async (event) => {
       }
       break;
     }
+    case 'RT_PORT_FORWARD': {
+      try {
+        const result = await chrome.runtime.sendMessage({
+          action: 'portforward',
+          op: event.data.payload.op,
+          params: event.data.payload.params
+        });
+
+        window.postMessage({
+          type: 'RT_PORT_FORWARD_RESPONSE',
+          id: event.data.id,
+          success: result.success,
+          result: result.data,
+          error: result.error
+        }, '*');
+      } catch (err) {
+        window.postMessage({
+          type: 'RT_PORT_FORWARD_RESPONSE',
+          id: event.data.id,
+          success: false,
+          error: err.message
+        }, '*');
+      }
+      break;
+    }
+
     case 'RT_EXECUTE_STREAM': {
       const port = chrome.runtime.connect({ name: 'rt-stream' });
       streamPorts.set(event.data.id, port);
