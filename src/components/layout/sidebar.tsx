@@ -7,6 +7,7 @@ import {
   Server, 
   Users, 
   Package, 
+  Container,
   ChevronRight 
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -16,6 +17,7 @@ const navItems = [
   { href: '/clusters', label: 'Clusters', icon: Server },
   { href: '/customers', label: 'Customers', icon: Users },
   { href: '/releases', label: 'Releases', icon: Package },
+  { href: '/pods', label: 'Pods', icon: Container },
 ];
 
 export function Sidebar() {

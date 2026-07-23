@@ -12,7 +12,7 @@ import { PodTable } from '@/components/pods/pod-table';
 interface ClusterPodsCardProps {
   clusterName: string;
   customers: { id: number; name: string; namespace: string }[];
-  releaseId: number;
+  releaseId?: number;
 }
 
 interface CustomerPodsState {
@@ -22,7 +22,7 @@ interface CustomerPodsState {
   refreshedAt?: Date;
 }
 
-export function ClusterPodsCard({ clusterName, customers, releaseId }: ClusterPodsCardProps) {
+export function ClusterPodsCard({ clusterName, customers, releaseId = 0 }: ClusterPodsCardProps) {
   const [states, setStates] = useState<Record<number, CustomerPodsState>>({});
   const [expanded, setExpanded] = useState<Record<number, boolean>>({});
   const [isRefreshingAll, setIsRefreshingAll] = useState(false);
