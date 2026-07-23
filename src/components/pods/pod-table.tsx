@@ -12,7 +12,7 @@ import {
 } from '@/components/ui/table';
 import { ChevronDown, ChevronRight } from 'lucide-react';
 import type { PodInfo } from '@/lib/services/agent-bridge';
-import { formatRelativeTime, statusVariant } from '@/components/pods/pod-utils';
+import { formatRelativeTime, statusBadgeClass } from '@/components/pods/pod-utils';
 import { ContainerCommandDialog } from '@/components/pods/container-command-dialog';
 import { ContainerShellDialog } from '@/components/pods/container-shell-dialog';
 import { ContainerLogsDialog } from '@/components/pods/container-logs-dialog';
@@ -34,6 +34,9 @@ export function PodTable({ pods, namespace, kubeContext }: PodTableProps) {
     setExpanded((prev) => ({ ...prev, [podName]: !prev[podName] }));
   };
 
+  // Alphabetical order — makes it easy to locate a specific service
+  const sortedPods = [...pods].sort((a, b) => a.name.localeCompare(b.name));
+
   return (
     <Table>
       <TableHeader>
@@ -49,7 +52,7 @@ export function PodTable({ pods, namespace, kubeContext }: PodTableProps) {
         </TableRow>
       </TableHeader>
       <TableBody>
-        {pods.map((pod) => {
+        {sortedPods.map((pod) => {
           const isExpanded = !!expanded[pod.name];
           const containers = pod.containers || [];
 
@@ -72,7 +75,7 @@ export function PodTable({ pods, namespace, kubeContext }: PodTableProps) {
                 </TableCell>
                 <TableCell className="font-mono text-xs">{pod.name}</TableCell>
                 <TableCell>
-                  <Badge variant={statusVariant(pod.status)}>{pod.status}</Badge>
+                  <Badge className={statusBadgeClass(pod.status)}>{pod.status}</Badge>
                 </TableCell>
                 <TableCell>{pod.ready}</TableCell>
                 <TableCell className={pod.restarts > 0 ? 'text-amber-600 font-medium' : ''}>
@@ -107,7 +110,7 @@ export function PodTable({ pods, namespace, kubeContext }: PodTableProps) {
                                 {container.name}
                               </TableCell>
                               <TableCell>
-                                <Badge variant={statusVariant(container.state)}>
+                                <Badge className={statusBadgeClass(container.state)}>
                                   {container.state}
                                 </Badge>
                               </TableCell>

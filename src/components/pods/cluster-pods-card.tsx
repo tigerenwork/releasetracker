@@ -6,7 +6,7 @@ import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { ChevronDown, ChevronRight, Loader2, RefreshCw } from 'lucide-react';
 import { agentBridge, type PodInfo } from '@/lib/services/agent-bridge';
-import { formatRelativeTime } from '@/components/pods/pod-utils';
+import { formatRelativeTime, isUnhealthy } from '@/components/pods/pod-utils';
 import { PodTable } from '@/components/pods/pod-table';
 
 interface ClusterPodsCardProps {
@@ -103,23 +103,39 @@ export function ClusterPodsCard({ clusterName, customers, releaseId = 0 }: Clust
     const pods = state.pods || [];
     const running = pods.filter((p) => p.status === 'Running').length;
     const restarts = pods.reduce((sum, p) => sum + p.restarts, 0);
-    const unhealthy = pods.filter((p) => p.status !== 'Running' && p.status !== 'Succeeded');
+    const unhealthy = pods.filter((p) => isUnhealthy(p.status));
+    const allHealthy = unhealthy.length === 0;
 
     return (
-      <div className="flex items-center gap-2">
-        <Badge variant={unhealthy.length > 0 ? 'destructive' : 'default'}>
+      <div className="flex items-center gap-2 min-w-0">
+        <Badge
+          className={
+            allHealthy
+              ? 'bg-green-100 text-green-700 hover:bg-green-100'
+              : 'bg-red-100 text-red-700 hover:bg-red-100'
+          }
+        >
           {running}/{pods.length} Running
         </Badge>
         {restarts > 0 && (
-          <span className="text-xs text-amber-600 font-medium">{restarts} restarts</span>
+          <span className="text-xs text-amber-600 font-medium whitespace-nowrap">
+            {restarts} restarts
+          </span>
         )}
-        {unhealthy.length > 0 && (
-          <span className="text-xs text-red-600">
-            {unhealthy.map((p) => `${p.name}: ${p.status}`).join(', ')}
+        {!allHealthy && (
+          <span
+            className="text-xs text-red-600 truncate"
+            title={unhealthy.map((p) => `${p.name}: ${p.status}`).join('\n')}
+          >
+            {unhealthy
+              .slice(0, 2)
+              .map((p) => `${p.name}: ${p.status}`)
+              .join(', ')}
+            {unhealthy.length > 2 && `, +${unhealthy.length - 2} more`}
           </span>
         )}
         {state.refreshedAt && (
-          <span className="text-xs text-slate-400">
+          <span className="text-xs text-slate-400 whitespace-nowrap ml-auto">
             {formatRelativeTime(state.refreshedAt.toISOString())}
           </span>
         )}

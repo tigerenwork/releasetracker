@@ -14,8 +14,22 @@ export function formatRelativeTime(isoDate: string | null): string {
   return `${days}d ${hours % 24}h ago`;
 }
 
-export function statusVariant(status: string): 'default' | 'secondary' | 'destructive' | 'outline' {
-  if (status === 'Running' || status === 'Succeeded') return 'default';
-  if (status === 'Pending' || status === 'Terminating') return 'secondary';
-  return 'destructive'; // CrashLoopBackOff, Error, ImagePullBackOff, ...
+/** Badge color classes for a pod/container status */
+export function statusBadgeClass(status: string): string {
+  if (status === 'Running') {
+    return 'bg-green-100 text-green-700 hover:bg-green-100';
+  }
+  if (status === 'Succeeded' || status === 'Completed') {
+    return 'bg-slate-100 text-slate-600 hover:bg-slate-100';
+  }
+  if (status === 'Pending' || status === 'ContainerCreating' || status === 'PodInitializing' || status === 'Terminating') {
+    return 'bg-amber-100 text-amber-700 hover:bg-amber-100';
+  }
+  // CrashLoopBackOff, ImagePullBackOff, ErrImagePull, Error, OOMKilled, Failed, ...
+  return 'bg-red-100 text-red-700 hover:bg-red-100';
+}
+
+/** Whether a status indicates a problem (Completed job pods are fine) */
+export function isUnhealthy(status: string): boolean {
+  return status !== 'Running' && status !== 'Succeeded' && status !== 'Completed';
 }
