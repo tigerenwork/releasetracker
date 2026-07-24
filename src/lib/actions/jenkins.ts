@@ -2,7 +2,7 @@
 
 import { db } from '@/lib/db';
 import { jenkinsSettings, customerExecutionConfigs, customerSteps, stepExecutions } from '@/lib/db/schema';
-import { eq } from 'drizzle-orm';
+import { and, desc, eq } from 'drizzle-orm';
 import { revalidatePath } from 'next/cache';
 import {
   resolveJenkinsConfig,
@@ -210,6 +210,28 @@ export type DeployStatus = {
   buildUrl?: string;
   duration?: number;
 };
+
+// Latest jenkins execution for a customer step — lets the executor restore the
+// last deploy (with its Jenkins build link) after the panel is closed/reopened
+export async function getLastDeploy(customerStepId: number) {
+  const execution = await db.query.stepExecutions.findFirst({
+    where: and(eq(stepExecutions.stepId, customerStepId), eq(stepExecutions.type, 'jenkins')),
+    orderBy: desc(stepExecutions.createdAt),
+  });
+  if (!execution) return null;
+
+  const meta = (execution.restResult || {}) as { buildUrl?: string; result?: string };
+  const request = (execution.request || {}) as { service?: string; branch?: string };
+  return {
+    executionId: execution.id,
+    service: request.service || null,
+    branch: request.branch || null,
+    state: execution.status, // 'running' | 'completed' | 'failed' | 'cancelled' | 'timeout'
+    result: meta.result || null,
+    buildUrl: meta.buildUrl || null,
+    duration: execution.duration ?? null,
+  };
+}
 
 export async function getDeployStatus(executionId: number): Promise<DeployStatus> {
   const execution = await db.query.stepExecutions.findFirst({

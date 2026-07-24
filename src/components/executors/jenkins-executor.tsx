@@ -19,6 +19,7 @@ import {
   getDeployParams,
   triggerDeploy,
   getDeployStatus,
+  getLastDeploy,
   type DeployStatus,
 } from '@/lib/actions/jenkins';
 
@@ -42,16 +43,43 @@ export function JenkinsExecutor({ customerStepId, customerId }: JenkinsExecutorP
   const [status, setStatus] = useState<DeployStatus | null>(null);
   const [deployError, setDeployError] = useState<string | null>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  // Branch of the restored last deploy, applied once the branch param loads
+  const restoredBranchRef = useRef<string | null>(null);
 
-  // Load available services on mount
+  // Load services and restore the last deploy (persisted in step_executions)
   useEffect(() => {
-    listServices(customerId)
-      .then((list) => {
+    (async () => {
+      try {
+        const [list, last] = await Promise.all([
+          listServices(customerId),
+          getLastDeploy(customerStepId).catch(() => null),
+        ]);
         setServices(list);
-        if (list.length === 1) setService(list[0]);
-      })
-      .catch((err) => setLoadError(err instanceof Error ? err.message : 'Failed to load services'));
-  }, [customerId]);
+        if (last?.service && list.includes(last.service)) {
+          restoredBranchRef.current = last.branch;
+          setService(last.service);
+        } else if (list.length === 1) {
+          setService(list[0]);
+        }
+        if (last) {
+          const state: DeployStatus['state'] =
+            last.state === 'running' ? 'running' :
+            last.state === 'completed' ? 'completed' : 'failed';
+          setStatus({
+            state,
+            result: last.result || (state === 'failed' ? last.state.toUpperCase() : null),
+            buildUrl: last.buildUrl || undefined,
+            duration: last.duration ?? undefined,
+          });
+          // A deploy left in flight when the panel was closed — resume tracking it
+          if (last.state === 'running') startPolling(last.executionId);
+        }
+      } catch (err) {
+        setLoadError(err instanceof Error ? err.message : 'Failed to load services');
+      }
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [customerId, customerStepId]);
 
   // Load the branch parameter whenever the selected service changes
   useEffect(() => {
@@ -64,7 +92,8 @@ export function JenkinsExecutor({ customerStepId, customerId }: JenkinsExecutorP
       .then((params) => {
         setBranchChoices(params.choices);
         setBranchType(params.type);
-        setBranch(params.default || params.choices?.[0] || '');
+        setBranch(restoredBranchRef.current || params.default || params.choices?.[0] || '');
+        restoredBranchRef.current = null;
       })
       .catch((err) => {
         // Fall back to free-text branch entry, but surface why choices failed to load
