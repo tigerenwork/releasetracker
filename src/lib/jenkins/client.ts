@@ -38,7 +38,10 @@ export async function resolveJenkinsConfig(): Promise<JenkinsConfig> {
 
 async function jenkinsFetch(config: JenkinsConfig, path: string, init?: RequestInit): Promise<Response> {
   const auth = Buffer.from(`${config.username}:${config.apiToken}`).toString('base64');
-  const res = await fetch(`${config.baseUrl}${path}`, {
+  // Absolute URLs (e.g. the queue/build URLs Jenkins returns in the Location
+  // header and api responses) are used as-is; relative paths get the base URL
+  const url = /^https?:\/\//i.test(path) ? path : `${config.baseUrl}${path}`;
+  const res = await fetch(url, {
     ...init,
     headers: {
       Authorization: `Basic ${auth}`,
