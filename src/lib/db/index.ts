@@ -140,7 +140,7 @@ const CREATE_TABLES_SQL = `
     release_id INTEGER NOT NULL,
     name TEXT NOT NULL,
     category TEXT NOT NULL CHECK(category IN ('deploy', 'verify')),
-    type TEXT NOT NULL CHECK(type IN ('bash', 'sql', 'rest', 'script', 'text')),
+    type TEXT NOT NULL CHECK(type IN ('bash', 'sql', 'rest', 'script', 'text', 'jenkins')),
     content TEXT NOT NULL,
     order_index INTEGER NOT NULL,
     description TEXT,
@@ -157,7 +157,7 @@ const CREATE_TABLES_SQL = `
     template_id INTEGER,
     name TEXT NOT NULL,
     category TEXT NOT NULL CHECK(category IN ('deploy', 'verify')),
-    type TEXT NOT NULL CHECK(type IN ('bash', 'sql', 'rest', 'script', 'text')),
+    type TEXT NOT NULL CHECK(type IN ('bash', 'sql', 'rest', 'script', 'text', 'jenkins')),
     content TEXT NOT NULL,
     order_index INTEGER NOT NULL,
     status TEXT DEFAULT 'pending' CHECK(status IN ('pending', 'done', 'skipped', 'reverted')),
@@ -197,6 +197,7 @@ const CREATE_TABLES_SQL = `
     sql_config TEXT,
     rest_config TEXT,
     script_config TEXT,
+    jenkins_config TEXT,
     is_active INTEGER DEFAULT 1,
     created_at INTEGER DEFAULT (unixepoch() * 1000),
     updated_at INTEGER DEFAULT (unixepoch() * 1000),
@@ -209,7 +210,7 @@ const CREATE_TABLES_SQL = `
     step_id INTEGER NOT NULL,
     customer_id INTEGER NOT NULL,
     release_id INTEGER NOT NULL,
-    type TEXT NOT NULL CHECK(type IN ('sql', 'rest', 'script')),
+    type TEXT NOT NULL CHECK(type IN ('sql', 'rest', 'script', 'jenkins')),
     status TEXT NOT NULL CHECK(status IN ('running', 'completed', 'failed', 'cancelled', 'timeout')),
     request TEXT NOT NULL,
     exit_code INTEGER,
@@ -230,6 +231,15 @@ const CREATE_TABLES_SQL = `
   CREATE INDEX IF NOT EXISTS step_executions_step_idx ON step_executions(step_id);
   CREATE INDEX IF NOT EXISTS step_executions_status_idx ON step_executions(status);
   CREATE INDEX IF NOT EXISTS step_executions_created_idx ON step_executions(created_at);
+
+  CREATE TABLE IF NOT EXISTS jenkins_settings (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    base_url TEXT NOT NULL,
+    username TEXT,
+    api_token TEXT,
+    created_at INTEGER DEFAULT (unixepoch() * 1000),
+    updated_at INTEGER DEFAULT (unixepoch() * 1000)
+  );
 `;
 
 // Backfill SQL: populate release_customers from existing customer_steps for already-active releases
@@ -242,14 +252,14 @@ const BACKFILL_SQL = `
 `;
 
 // New DDL used when rebuilding tables whose CHECK constraints predate
-// the 'rest'/'script' step types (SQLite cannot alter CHECK constraints)
+// newer step/execution types (SQLite cannot alter CHECK constraints)
 const STEP_TEMPLATES_DDL = `
   CREATE TABLE step_templates (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     release_id INTEGER NOT NULL,
     name TEXT NOT NULL,
     category TEXT NOT NULL CHECK(category IN ('deploy', 'verify')),
-    type TEXT NOT NULL CHECK(type IN ('bash', 'sql', 'rest', 'script', 'text')),
+    type TEXT NOT NULL CHECK(type IN ('bash', 'sql', 'rest', 'script', 'text', 'jenkins')),
     content TEXT NOT NULL,
     order_index INTEGER NOT NULL,
     description TEXT,
@@ -268,7 +278,7 @@ const CUSTOMER_STEPS_DDL = `
     template_id INTEGER,
     name TEXT NOT NULL,
     category TEXT NOT NULL CHECK(category IN ('deploy', 'verify')),
-    type TEXT NOT NULL CHECK(type IN ('bash', 'sql', 'rest', 'script', 'text')),
+    type TEXT NOT NULL CHECK(type IN ('bash', 'sql', 'rest', 'script', 'text', 'jenkins')),
     content TEXT NOT NULL,
     order_index INTEGER NOT NULL,
     status TEXT DEFAULT 'pending' CHECK(status IN ('pending', 'done', 'skipped', 'reverted')),
@@ -287,10 +297,48 @@ const CUSTOMER_STEPS_DDL = `
   );
 `;
 
+const STEP_EXECUTIONS_DDL = `
+  CREATE TABLE step_executions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    step_id INTEGER NOT NULL,
+    customer_id INTEGER NOT NULL,
+    release_id INTEGER NOT NULL,
+    type TEXT NOT NULL CHECK(type IN ('sql', 'rest', 'script', 'jenkins')),
+    status TEXT NOT NULL CHECK(status IN ('running', 'completed', 'failed', 'cancelled', 'timeout')),
+    request TEXT NOT NULL,
+    exit_code INTEGER,
+    stdout TEXT,
+    stderr TEXT,
+    sql_result TEXT,
+    rest_result TEXT,
+    script_result TEXT,
+    started_at INTEGER NOT NULL,
+    completed_at INTEGER,
+    duration INTEGER,
+    created_at INTEGER DEFAULT (unixepoch() * 1000),
+    FOREIGN KEY (step_id) REFERENCES customer_steps(id) ON DELETE CASCADE,
+    FOREIGN KEY (customer_id) REFERENCES customers(id),
+    FOREIGN KEY (release_id) REFERENCES releases(id)
+  );
+`;
+
+// Indexes on step_executions are dropped together with the old table during a
+// rebuild, so they have to be recreated afterwards
+const STEP_EXECUTIONS_INDEXES = [
+  'CREATE INDEX IF NOT EXISTS step_executions_step_idx ON step_executions(step_id)',
+  'CREATE INDEX IF NOT EXISTS step_executions_status_idx ON step_executions(status)',
+  'CREATE INDEX IF NOT EXISTS step_executions_created_idx ON step_executions(created_at)',
+];
+
 // A column DEFAULT on execution_config (e.g. from `DEFAULT "execution_config"`)
 // makes every pre-existing row read a non-JSON string and breaks JSON parsing
 const BAD_EXECUTION_CONFIG_DEFAULT = /execution_config[^,)]*DEFAULT/i;
-const STALE_TYPE_CHECK = "CHECK(type IN ('bash', 'sql', 'text'))";
+const TYPE_CHECK_RE = /CHECK\(type IN \(([^)]*)\)\)/i;
+
+function typeCheckLacks(ddl: string, value: string) {
+  const match = ddl.match(TYPE_CHECK_RE);
+  return !!match && !match[1].includes(`'${value}'`);
+}
 
 const STEP_TEMPLATES_COLS =
   'id, release_id, name, category, type, content, order_index, description, execution_config, created_at';
@@ -298,16 +346,25 @@ const STEP_TEMPLATES_SELECT_COLS =
   "id, release_id, name, category, type, content, order_index, description, NULLIF(execution_config, 'execution_config'), created_at";
 const CUSTOMER_STEPS_COLS =
   'id, release_id, customer_id, template_id, name, category, type, content, order_index, status, executed_at, executed_by, skip_reason, notes, is_custom, is_overridden, created_at, updated_at';
+const STEP_EXECUTIONS_COLS =
+  'id, step_id, customer_id, release_id, type, status, request, exit_code, stdout, stderr, sql_result, rest_result, script_result, started_at, completed_at, duration, created_at';
 
 function rebuildPlanFor(table: string, ddl: string) {
-  if (table === 'step_templates' && (ddl.includes(STALE_TYPE_CHECK) || BAD_EXECUTION_CONFIG_DEFAULT.test(ddl))) {
-    return { table, ddl: STEP_TEMPLATES_DDL, insertCols: STEP_TEMPLATES_COLS, selectCols: STEP_TEMPLATES_SELECT_COLS };
+  if (table === 'step_templates' && (typeCheckLacks(ddl, 'jenkins') || BAD_EXECUTION_CONFIG_DEFAULT.test(ddl))) {
+    return { table, ddl: STEP_TEMPLATES_DDL, insertCols: STEP_TEMPLATES_COLS, selectCols: STEP_TEMPLATES_SELECT_COLS, after: [] as string[] };
   }
-  if (table === 'customer_steps' && ddl.includes(STALE_TYPE_CHECK)) {
-    return { table, ddl: CUSTOMER_STEPS_DDL, insertCols: CUSTOMER_STEPS_COLS, selectCols: CUSTOMER_STEPS_COLS };
+  if (table === 'customer_steps' && typeCheckLacks(ddl, 'jenkins')) {
+    return { table, ddl: CUSTOMER_STEPS_DDL, insertCols: CUSTOMER_STEPS_COLS, selectCols: CUSTOMER_STEPS_COLS, after: [] as string[] };
+  }
+  // Rebuild when the CHECK predates 'jenkins', or when a previous table rebuild
+  // left the FK to customer_steps pointing at the dropped _customer_steps_old
+  if (table === 'step_executions' && (typeCheckLacks(ddl, 'jenkins') || ddl.includes('_customer_steps_old'))) {
+    return { table, ddl: STEP_EXECUTIONS_DDL, insertCols: STEP_EXECUTIONS_COLS, selectCols: STEP_EXECUTIONS_COLS, after: STEP_EXECUTIONS_INDEXES };
   }
   return null;
 }
+
+const REBUILT_TABLES = ['step_templates', 'customer_steps', 'step_executions'];
 
 // Migrate an existing SQLite database created with an older schema (idempotent)
 function migrateSqlite(client: Database.Database) {
@@ -320,22 +377,31 @@ function migrateSqlite(client: Database.Database) {
   // 2. Clean up non-JSON values stored in the JSON column
   client.exec(`UPDATE step_templates SET execution_config = NULL WHERE execution_config = 'execution_config'`);
 
-  // 3. Rebuild tables with stale CHECK constraints or a bad column DEFAULT
+  // 3. Add customer_execution_configs.jenkins_config if missing
+  const configColumns = client.prepare('PRAGMA table_info(customer_execution_configs)').all() as { name: string }[];
+  if (!configColumns.some((c) => c.name === 'jenkins_config')) {
+    client.exec('ALTER TABLE customer_execution_configs ADD COLUMN jenkins_config TEXT');
+  }
+
+  // 4. Rebuild tables with stale CHECK constraints or a bad column DEFAULT
   const ddlOf = (table: string) =>
     (client.prepare('SELECT sql FROM sqlite_master WHERE name = ?').get(table) as { sql?: string } | undefined)?.sql || '';
 
-  const rebuilds = [rebuildPlanFor('step_templates', ddlOf('step_templates')), rebuildPlanFor('customer_steps', ddlOf('customer_steps'))]
+  const rebuilds = REBUILT_TABLES.map((table) => rebuildPlanFor(table, ddlOf(table)))
     .filter((r): r is NonNullable<typeof r> => r !== null);
 
   if (rebuilds.length > 0) {
     client.pragma('foreign_keys = OFF');
     try {
-      for (const { table, ddl, insertCols, selectCols } of rebuilds) {
+      for (const { table, ddl, insertCols, selectCols, after } of rebuilds) {
         client.transaction(() => {
           client.exec(`ALTER TABLE ${table} RENAME TO _${table}_old`);
           client.exec(ddl);
           client.exec(`INSERT INTO ${table} (${insertCols}) SELECT ${selectCols} FROM _${table}_old`);
           client.exec(`DROP TABLE _${table}_old`);
+          for (const stmt of after) {
+            client.exec(stmt);
+          }
         })();
       }
     } finally {
@@ -355,18 +421,23 @@ async function migrateTurso(client: ReturnType<typeof createClient>) {
   // 2. Clean up non-JSON values stored in the JSON column
   await client.execute(`UPDATE step_templates SET execution_config = NULL WHERE execution_config = 'execution_config'`);
 
-  // 3. Rebuild tables with stale CHECK constraints or a bad column DEFAULT
+  // 3. Add customer_execution_configs.jenkins_config if missing
+  const configColumns = await client.execute('PRAGMA table_info(customer_execution_configs)');
+  if (!configColumns.rows.some((c) => c.name === 'jenkins_config')) {
+    await client.execute('ALTER TABLE customer_execution_configs ADD COLUMN jenkins_config TEXT');
+  }
+
+  // 4. Rebuild tables with stale CHECK constraints or a bad column DEFAULT
   const ddlOf = async (table: string) => {
     const rs = await client.execute({ sql: 'SELECT sql FROM sqlite_master WHERE name = ?', args: [table] });
     return (rs.rows[0]?.sql as string | undefined) || '';
   };
 
-  const rebuilds = [
-    rebuildPlanFor('step_templates', await ddlOf('step_templates')),
-    rebuildPlanFor('customer_steps', await ddlOf('customer_steps')),
-  ].filter((r): r is NonNullable<typeof r> => r !== null);
+  const rebuilds = (
+    await Promise.all(REBUILT_TABLES.map(async (table) => rebuildPlanFor(table, await ddlOf(table))))
+  ).filter((r): r is NonNullable<typeof r> => r !== null);
 
-  for (const { table, ddl, insertCols, selectCols } of rebuilds) {
+  for (const { table, ddl, insertCols, selectCols, after } of rebuilds) {
     await client.execute('PRAGMA foreign_keys = OFF');
     try {
       await client.batch(
@@ -375,6 +446,7 @@ async function migrateTurso(client: ReturnType<typeof createClient>) {
           ddl,
           `INSERT INTO ${table} (${insertCols}) SELECT ${selectCols} FROM _${table}_old`,
           `DROP TABLE _${table}_old`,
+          ...after,
         ],
         'write'
       );

@@ -15,15 +15,24 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { createCustomer, updateCustomer } from '@/lib/actions/customers';
+import { updateCustomerJenkinsConfig } from '@/lib/actions/jenkins';
 import type { Customer, Cluster } from '@/lib/db/schema';
+
+type JenkinsMapping = {
+  view?: string;
+  job?: string;
+  serviceParam?: string;
+  branchParam?: string;
+};
 
 interface CustomerFormProps {
   customer?: Customer;
   clusters: Cluster[];
+  jenkinsConfig?: JenkinsMapping | null;
   isEdit?: boolean;
 }
 
-export function CustomerForm({ customer, clusters, isEdit = false }: CustomerFormProps) {
+export function CustomerForm({ customer, clusters, jenkinsConfig, isEdit = false }: CustomerFormProps) {
   const router = useRouter();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -42,6 +51,12 @@ export function CustomerForm({ customer, clusters, isEdit = false }: CustomerFor
 
       if (isEdit && customer) {
         await updateCustomer(customer.id, data);
+        await updateCustomerJenkinsConfig(customer.id, {
+          view: formData.get('jenkinsView') as string,
+          job: formData.get('jenkinsJob') as string,
+          serviceParam: formData.get('jenkinsServiceParam') as string,
+          branchParam: formData.get('jenkinsBranchParam') as string,
+        });
       } else {
         await createCustomer(data);
       }
@@ -123,6 +138,61 @@ export function CustomerForm({ customer, clusters, isEdit = false }: CustomerFor
               rows={3}
             />
           </div>
+
+          {isEdit && (
+            <div className="space-y-4 border-t pt-6">
+              <div>
+                <h3 className="text-sm font-medium text-slate-900">Jenkins Integration</h3>
+                <p className="text-sm text-slate-500 mt-1">
+                  Map this customer to a Jenkins view or job for deployment steps. Set either a view or a job, not both.
+                </p>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="jenkinsView">Jenkins View</Label>
+                  <Input
+                    id="jenkinsView"
+                    name="jenkinsView"
+                    defaultValue={jenkinsConfig?.view || ''}
+                    placeholder="e.g., acme-deploys"
+                  />
+                  <p className="text-sm text-slate-500">Each job in the view is a deployable service</p>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="jenkinsJob">Jenkins Job</Label>
+                  <Input
+                    id="jenkinsJob"
+                    name="jenkinsJob"
+                    defaultValue={jenkinsConfig?.job || ''}
+                    placeholder="e.g., deploys/acme"
+                  />
+                  <p className="text-sm text-slate-500">Single job; services come from its service parameter</p>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="jenkinsServiceParam">Service Parameter</Label>
+                  <Input
+                    id="jenkinsServiceParam"
+                    name="jenkinsServiceParam"
+                    defaultValue={jenkinsConfig?.serviceParam || ''}
+                    placeholder="auto-detected (matches /service/i)"
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="jenkinsBranchParam">Branch Parameter</Label>
+                  <Input
+                    id="jenkinsBranchParam"
+                    name="jenkinsBranchParam"
+                    defaultValue={jenkinsConfig?.branchParam || ''}
+                    placeholder="auto-detected (matches /branch/i)"
+                  />
+                </div>
+              </div>
+            </div>
+          )}
 
           <div className="flex gap-4">
             <Button type="submit" disabled={isSubmitting}>

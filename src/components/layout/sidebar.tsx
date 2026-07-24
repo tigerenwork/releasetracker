@@ -8,6 +8,7 @@ import {
   Users, 
   Package, 
   Container,
+  Workflow,
   ChevronRight 
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -18,6 +19,7 @@ const navItems = [
   { href: '/customers', label: 'Customers', icon: Users },
   { href: '/releases', label: 'Releases', icon: Package },
   { href: '/pods', label: 'Pods', icon: Container },
+  { href: '/jenkins', label: 'Jenkins', icon: Workflow },
 ];
 
 export function Sidebar() {

@@ -165,7 +165,7 @@ my-app/
 - Auto-execution of bash/SQL scripts via K8s agents
 - Multi-user support with authentication
 - Audit logging
-- Jenkins/Rancher API integrations
+- Rancher API integration (Jenkins integration is available — configure the server on the `/jenkins` settings page and map customers to a Jenkins view/job on the customer edit page)
 - Email notifications
 - Scheduled releases
 

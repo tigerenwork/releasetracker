@@ -2,6 +2,7 @@ import { notFound } from 'next/navigation';
 import { CustomerForm } from '@/components/customers/customer-form';
 import { getCustomerById } from '@/lib/actions/customers';
 import { listClusters } from '@/lib/actions/clusters';
+import { getCustomerJenkinsConfig } from '@/lib/actions/jenkins';
 
 interface EditCustomerPageProps {
   params: Promise<{
@@ -13,9 +14,10 @@ export const dynamic = 'force-dynamic';
 
 export default async function EditCustomerPage({ params }: EditCustomerPageProps) {
   const { id } = await params;
-  const [customer, clusters] = await Promise.all([
+  const [customer, clusters, jenkinsConfig] = await Promise.all([
     getCustomerById(parseInt(id)),
     listClusters(),
+    getCustomerJenkinsConfig(parseInt(id)),
   ]);
 
   if (!customer) {
@@ -30,7 +32,7 @@ export default async function EditCustomerPage({ params }: EditCustomerPageProps
           Update customer information
         </p>
       </div>
-      <CustomerForm customer={customer} clusters={clusters} isEdit />
+      <CustomerForm customer={customer} clusters={clusters} jenkinsConfig={jenkinsConfig} isEdit />
     </div>
   );
 }

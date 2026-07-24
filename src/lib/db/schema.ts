@@ -65,7 +65,7 @@ export const stepTemplates = sqliteTable('step_templates', {
   releaseId: integer('release_id').notNull().references(() => releases.id, { onDelete: 'cascade' }),
   name: text('name').notNull(),
   category: text('category', { enum: ['deploy', 'verify'] }).notNull(),
-  type: text('type', { enum: ['bash', 'sql', 'rest', 'script', 'text'] }).notNull(),
+  type: text('type', { enum: ['bash', 'sql', 'rest', 'script', 'text', 'jenkins'] }).notNull(),
   content: text('content').notNull(),
   orderIndex: integer('order_index').notNull(),
   description: text('description'),
@@ -92,7 +92,7 @@ export const customerSteps = sqliteTable('customer_steps', {
   // Copied/Overridden fields
   name: text('name').notNull(),
   category: text('category', { enum: ['deploy', 'verify'] }).notNull(),
-  type: text('type', { enum: ['bash', 'sql', 'rest', 'script', 'text'] }).notNull(),
+  type: text('type', { enum: ['bash', 'sql', 'rest', 'script', 'text', 'jenkins'] }).notNull(),
   content: text('content').notNull(),
   orderIndex: integer('order_index').notNull(),
   
@@ -153,6 +153,14 @@ export const customerExecutionConfigs = sqliteTable('customer_execution_configs'
     workingDir?: string;
   }>(),
   
+  // Jenkins execution config (per-customer view/job mapping)
+  jenkinsConfig: text('jenkins_config', { mode: 'json' }).$type<{
+    view?: string;
+    job?: string;
+    serviceParam?: string;
+    branchParam?: string;
+  }>(),
+  
   isActive: integer('is_active', { mode: 'boolean' }).default(true),
   createdAt: integer('created_at', { mode: 'timestamp' }).$defaultFn(() => new Date()),
   updatedAt: integer('updated_at', { mode: 'timestamp' }).$defaultFn(() => new Date()),
@@ -174,7 +182,7 @@ export const stepExecutions = sqliteTable('step_executions', {
   releaseId: integer('release_id').notNull().references(() => releases.id),
   
   // Execution details
-  type: text('type', { enum: ['sql', 'rest', 'script'] }).notNull(),
+  type: text('type', { enum: ['sql', 'rest', 'script', 'jenkins'] }).notNull(),
   status: text('status', { enum: ['running', 'completed', 'failed', 'cancelled', 'timeout'] }).notNull(),
   
   // Request details (stored for audit)
@@ -207,6 +215,17 @@ export const stepExecutionsRelations = relations(stepExecutions, ({ one }) => ({
   customer: one(customers, { fields: [stepExecutions.customerId], references: [customers.id] }),
   release: one(releases, { fields: [stepExecutions.releaseId], references: [releases.id] }),
 }));
+
+// ==================== Jenkins Settings ====================
+// Singleton connection settings (one row, enforced by convention in the actions)
+export const jenkinsSettings = sqliteTable('jenkins_settings', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  baseUrl: text('base_url').notNull(),
+  username: text('username'),
+  apiToken: text('api_token'),
+  createdAt: integer('created_at', { mode: 'timestamp' }).$defaultFn(() => new Date()),
+  updatedAt: integer('updated_at', { mode: 'timestamp' }).$defaultFn(() => new Date()),
+});
 
 // ==================== Release Customers (enrollment) ====================
 export const releaseCustomers = sqliteTable('release_customers', {
@@ -247,10 +266,13 @@ export type NewStepExecution = typeof stepExecutions.$inferInsert;
 export type ReleaseCustomer = typeof releaseCustomers.$inferSelect;
 export type NewReleaseCustomer = typeof releaseCustomers.$inferInsert;
 
+export type JenkinsSettings = typeof jenkinsSettings.$inferSelect;
+export type NewJenkinsSettings = typeof jenkinsSettings.$inferInsert;
+
 export type StepCategory = 'deploy' | 'verify';
-export type StepType = 'bash' | 'sql' | 'rest' | 'script' | 'text';
+export type StepType = 'bash' | 'sql' | 'rest' | 'script' | 'text' | 'jenkins';
 export type ReleaseType = 'onboarding' | 'release' | 'hotfix';
 export type ReleaseStatus = 'draft' | 'active' | 'archived';
 export type StepStatus = 'pending' | 'done' | 'skipped' | 'reverted';
 export type ExecutionStatus = 'running' | 'completed' | 'failed' | 'cancelled' | 'timeout';
-export type ExecutionType = 'sql' | 'rest' | 'script';
+export type ExecutionType = 'sql' | 'rest' | 'script' | 'jenkins';

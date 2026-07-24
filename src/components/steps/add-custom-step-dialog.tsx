@@ -21,6 +21,16 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Checkbox } from '@/components/ui/checkbox';
+import type { StepType } from '@/lib/db/schema';
+
+const STEP_TYPE_OPTIONS: { value: StepType; label: string }[] = [
+  { value: 'bash', label: 'Bash Script' },
+  { value: 'sql', label: 'SQL' },
+  { value: 'rest', label: 'REST' },
+  { value: 'script', label: 'Script' },
+  { value: 'text', label: 'Text/Instructions' },
+  { value: 'jenkins', label: 'Jenkins Deploy' },
+];
 
 interface ExistingStep {
   id: number;
@@ -39,7 +49,7 @@ interface AddCustomStepDialogProps {
   onAdd: (data: {
     name: string;
     category: 'deploy' | 'verify';
-    type: 'bash' | 'sql' | 'text';
+    type: StepType;
     content: string;
     orderIndex: number;
     addToTemplate: boolean;
@@ -58,7 +68,7 @@ export function AddCustomStepDialog({
 }: AddCustomStepDialogProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [name, setName] = useState('');
-  const [type, setType] = useState<'bash' | 'sql' | 'text'>('bash');
+  const [type, setType] = useState<StepType>('bash');
   const [content, setContent] = useState('');
   const [insertAfterId, setInsertAfterId] = useState<string>('__start__');
   const [addToTemplate, setAddToTemplate] = useState(false);
@@ -112,11 +122,7 @@ export function AddCustomStepDialog({
     setOpenState(false);
   };
 
-  const typeOptions = [
-    { value: 'bash', label: 'Bash Script' },
-    { value: 'sql', label: 'SQL' },
-    { value: 'text', label: 'Text/Instructions' },
-  ];
+  const typeOptions = STEP_TYPE_OPTIONS;
 
   return (
     <Dialog open={openState} onOpenChange={setOpenState}>
@@ -151,7 +157,7 @@ export function AddCustomStepDialog({
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
               <Label htmlFor="type">Type</Label>
-              <Select value={type} onValueChange={(v) => setType(v as 'bash' | 'sql' | 'text')}>
+              <Select value={type} onValueChange={(v) => setType(v as StepType)}>
                 <SelectTrigger>
                   <SelectValue />
                 </SelectTrigger>

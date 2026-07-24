@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Textarea } from '@/components/ui/textarea';
 import { CodeBlock } from './code-block';
+import { JenkinsExecutor } from '@/components/executors/jenkins-executor';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
 import {
@@ -84,7 +85,10 @@ const statusLabels = {
 const typeLabels = {
   bash: 'Bash Script',
   sql: 'SQL',
+  rest: 'REST',
+  script: 'Script',
   text: 'Text',
+  jenkins: 'Jenkins Deploy',
 };
 
 export function StepDetailPanel({
@@ -299,6 +303,13 @@ export function StepDetailPanel({
             </div>
 
             <Separator />
+
+            {/* Jenkins executor */}
+            {step.type === 'jenkins' && (
+              <JenkinsExecutor customerStepId={step.id} customerId={step.customerId} />
+            )}
+
+            {step.type === 'jenkins' && <Separator />}
 
             {/* Execution Section */}
             {step.status !== 'done' && step.status !== 'skipped' && (

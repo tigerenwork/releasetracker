@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button';
 
 interface CodeBlockProps {
   code: string;
-  type: 'bash' | 'sql' | 'text' | 'branch';
+  type: 'bash' | 'sql' | 'rest' | 'script' | 'text' | 'jenkins' | 'branch';
   showLineNumbers?: boolean;
 }
 
@@ -28,7 +28,7 @@ export function CodeBlock({ code, type, showLineNumbers = true }: CodeBlockProps
         require('prismjs/components/prism-bash');
       }
 
-      const language = type === 'text' || type === 'branch' ? 'text' : type;
+      const language = type === 'bash' || type === 'sql' ? type : 'text';
       const grammar = Prism.languages[language] || Prism.languages.text;
       return Prism.highlight(code, grammar, language);
     } catch (e) {
