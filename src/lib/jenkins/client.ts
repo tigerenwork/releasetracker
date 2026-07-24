@@ -127,6 +127,29 @@ export async function getJobParameters(jobPath: string, config?: JenkinsConfig):
   return params;
 }
 
+// Fetch the values of a dynamic git parameter (Git Parameter plugin). These
+// are not exposed via api/json, but the plugin serves them through the same
+// descriptor "fill" endpoint the Jenkins UI dropdown uses:
+// POST /job/<job>/descriptorByName/<GitParameterDefinition>/fillValueItems?param=X
+export async function getGitParameterValues(
+  jobPath: string,
+  paramName: string,
+  config?: JenkinsConfig,
+): Promise<{ choices: string[]; default?: string } | null> {
+  const cfg = config || (await resolveJenkinsConfig());
+  const descriptor = 'net.uaznia.lukanus.hudson.plugins.gitparameter.GitParameterDefinition';
+  const res = await jenkinsFetch(
+    cfg,
+    `${encodeJobPath(jobPath)}/descriptorByName/${descriptor}/fillValueItems?param=${encodeURIComponent(paramName)}`,
+    { method: 'POST' },
+  );
+  const data = await res.json();
+  const values: { value?: string; selected?: boolean }[] = data.values || [];
+  const choices = values.map((v) => v.value).filter((v): v is string => !!v);
+  if (!choices.length) return null;
+  return { choices, default: values.find((v) => v.selected)?.value };
+}
+
 // Trigger a parameterized build; returns the queue item URL from the Location header
 export async function triggerBuild(jobPath: string, params: Record<string, string>, config?: JenkinsConfig): Promise<string> {
   const cfg = config || (await resolveJenkinsConfig());

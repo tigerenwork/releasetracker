@@ -9,6 +9,7 @@ import {
   testConnection,
   listJobs,
   getJobParameters,
+  getGitParameterValues,
   triggerBuild,
   getQueueItem,
   getBuildStatus,
@@ -146,11 +147,24 @@ export async function getDeployParams(customerId: number, service: string) {
   const params = await getJobParameters(jobPath);
   const branchParam = findParam(params, mapping.branchParam, /branch/i);
 
+  let choices = branchParam?.choices || null;
+  let defaultValue = branchParam?.default;
+
+  // Dynamic git parameters don't expose values via api/json — fetch them from
+  // the Git Parameter plugin's fill endpoint (same one the Jenkins UI uses)
+  if (branchParam && !choices && branchParam.type && /git/i.test(branchParam.type)) {
+    const gitValues = await getGitParameterValues(jobPath, branchParam.name);
+    if (gitValues) {
+      choices = gitValues.choices;
+      defaultValue = gitValues.default || defaultValue;
+    }
+  }
+
   return {
     branchParam: branchParam?.name || null,
     type: branchParam?.type || null,
-    choices: branchParam?.choices || null,
-    default: branchParam?.default,
+    choices,
+    default: defaultValue,
   };
 }
 
