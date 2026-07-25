@@ -27,6 +27,8 @@ export function ClusterPodsCard({ clusterName, customers, releaseId = 0 }: Clust
   const [states, setStates] = useState<Record<number, CustomerPodsState>>({});
   const [expanded, setExpanded] = useState<Record<number, boolean>>({});
   const [isRefreshingAll, setIsRefreshingAll] = useState(false);
+  // Cluster-level collapse: the whole customer list under this cluster
+  const [isOpen, setIsOpen] = useState(true);
 
   // agentBridge only exists in the browser; defer the check until after
   // mount so server-rendered HTML matches the first client render
@@ -148,11 +150,20 @@ export function ClusterPodsCard({ clusterName, customers, releaseId = 0 }: Clust
     <Card>
       <CardHeader className="pb-3">
         <CardTitle className="flex items-center justify-between text-base">
-          <span className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setIsOpen((v) => !v)}
+            className="flex items-center gap-2 cursor-pointer select-none"
+          >
+            {isOpen ? (
+              <ChevronDown className="h-4 w-4 text-slate-400" />
+            ) : (
+              <ChevronRight className="h-4 w-4 text-slate-400" />
+            )}
             <span className="w-3 h-3 bg-blue-500 rounded-full"></span>
             {clusterName}
             <span className="text-sm font-normal text-slate-500">Customer Pods</span>
-          </span>
+          </button>
           <div className="flex items-center gap-2">
             <PortForwardPanel clusterName={clusterName} compact />
             <Button
@@ -172,6 +183,7 @@ export function ClusterPodsCard({ clusterName, customers, releaseId = 0 }: Clust
         </CardTitle>
       </CardHeader>
 
+      {isOpen && (
       <CardContent>
         {!mounted ? (
           <p className="text-sm text-slate-400">Checking agent extension…</p>
@@ -241,6 +253,7 @@ export function ClusterPodsCard({ clusterName, customers, releaseId = 0 }: Clust
           </div>
         )}
       </CardContent>
+      )}
     </Card>
   );
 }
