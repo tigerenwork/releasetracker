@@ -1,7 +1,7 @@
 'use server';
 
 import { db } from '@/lib/db';
-import { customers, clusters } from '@/lib/db/schema';
+import { customers, clusters, customerExecutionConfigs } from '@/lib/db/schema';
 import { eq, and } from 'drizzle-orm';
 import { revalidatePath } from 'next/cache';
 
@@ -66,6 +66,14 @@ export async function getCustomerById(id: number) {
     where: eq(customers.id, id),
     with: { cluster: true },
   });
+}
+
+// Per-customer SQL execution defaults (env var name, client) if configured
+export async function getCustomerSqlConfig(customerId: number) {
+  const row = await db.query.customerExecutionConfigs.findFirst({
+    where: eq(customerExecutionConfigs.customerId, customerId),
+  });
+  return row?.sqlConfig || null;
 }
 
 export async function getCustomersGroupedByCluster() {

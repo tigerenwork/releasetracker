@@ -9,6 +9,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { CodeBlock } from './code-block';
 import { JenkinsExecutor } from '@/components/executors/jenkins-executor';
 import { BashExecutor } from '@/components/executors/bash-executor';
+import { SqlExecutor } from '@/components/executors/sql-step-executor';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
 import {
@@ -325,6 +326,21 @@ export function StepDetailPanel({
             )}
 
             {step.type === 'bash' && <Separator />}
+
+            {/* SQL executor: runs the step's SQL in the target pod, connection
+                string comes from an env var inside the container */}
+            {step.type === 'sql' && (
+              <SqlExecutor
+                stepId={step.id}
+                customerId={step.customerId}
+                releaseId={step.releaseId}
+                content={step.content}
+                namespace={step.customer?.namespace || ''}
+                kubeContext={step.customer?.cluster?.name}
+              />
+            )}
+
+            {step.type === 'sql' && <Separator />}
 
             {/* Execution Section */}
             {step.status !== 'done' && step.status !== 'skipped' && (
