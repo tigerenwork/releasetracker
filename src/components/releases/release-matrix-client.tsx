@@ -1,6 +1,7 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { Plus, CheckCircle, Circle, SkipForward, RotateCcw, FileText, AlertCircle, Edit } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -28,84 +29,124 @@ const statusIcons = {
 };
 
 export function ReleaseMatrixClient({ stepsByCluster, category, releaseId }: ReleaseMatrixClientProps) {
+  const router = useRouter();
   const [selectedStep, setSelectedStep] = useState<any>(null);
   const [selectedTemplate, setSelectedTemplate] = useState<any>(null);
   const [isPanelOpen, setIsPanelOpen] = useState(false);
-  const [refreshKey, setRefreshKey] = useState(0);
+  // Local copy of the steps data so actions update the matrix immediately; a
+  // soft router.refresh() then reconciles with the server without unmounting
+  // (which is what keeps the horizontal scroll position and the panel open)
+  const [stepsData, setStepsData] = useState(stepsByCluster);
 
-  const clusters = Object.values(stepsByCluster);
+  useEffect(() => setStepsData(stepsByCluster), [stepsByCluster]);
+
+  // Keep the open panel's step in sync with optimistic/refreshed data
+  useEffect(() => {
+    if (!selectedStep) return;
+    for (const clusterData of Object.values(stepsData) as any[]) {
+      for (const customerData of Object.values(clusterData.customers) as any[]) {
+        const found = customerData.steps.find((s: any) => s.id === selectedStep.id);
+        if (found) {
+          setSelectedStep(found);
+          return;
+        }
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [stepsData]);
+
+  const clusters = Object.values(stepsData);
+
+  const patchStep = (id: number, patch: Record<string, any>) => {
+    setStepsData((prev: any) => {
+      const next: any = {};
+      for (const [key, clusterData] of Object.entries(prev)) {
+        const customers: any = {};
+        for (const [cid, customerData] of Object.entries((clusterData as any).customers)) {
+          customers[cid] = {
+            ...(customerData as any),
+            steps: (customerData as any).steps.map((s: any) => (s.id === id ? { ...s, ...patch } : s)),
+          };
+        }
+        next[key] = { ...(clusterData as any), customers };
+      }
+      return next;
+    });
+  };
+
+  const removeStep = (id: number) => {
+    setStepsData((prev: any) => {
+      const next: any = {};
+      for (const [key, clusterData] of Object.entries(prev)) {
+        const customers: any = {};
+        for (const [cid, customerData] of Object.entries((clusterData as any).customers)) {
+          customers[cid] = {
+            ...(customerData as any),
+            steps: (customerData as any).steps.filter((s: any) => s.id !== id),
+          };
+        }
+        next[key] = { ...(clusterData as any), customers };
+      }
+      return next;
+    });
+  };
 
   const handleStepClick = (step: any, template: any = null) => {
-    console.log('[ReleaseMatrixClient] handleStepClick called:', {
-      stepId: step?.id,
-      stepName: step?.name,
-      stepContent: step?.content?.substring(0, 50),
-      templateId: template?.id,
-      templateContent: template?.content?.substring(0, 50),
-    });
     setSelectedStep(step);
     setSelectedTemplate(template);
     setIsPanelOpen(true);
   };
 
-  const handleActionComplete = () => {
-    setRefreshKey(prev => prev + 1);
-    setIsPanelOpen(false);
-    // Refresh the page to get updated data, preserving the current tab
-    const currentUrl = new URL(window.location.href);
-    window.location.href = currentUrl.toString();
-  };
-
-  // Server actions wrapped in async functions
+  // Server actions wrapped in async functions. Each applies its change
+  // optimistically, then soft-refreshes — no full page reload.
   const markStepDone = async (id: number, notes?: string) => {
     const { markStepDone } = await import('@/lib/actions/customer-steps');
     await markStepDone(id, notes);
-    handleActionComplete();
+    patchStep(id, { status: 'done', ...(notes !== undefined ? { notes } : {}) });
+    router.refresh();
   };
 
   const skipStep = async (id: number, reason: string) => {
     const { skipStep } = await import('@/lib/actions/customer-steps');
     await skipStep(id, reason);
-    handleActionComplete();
+    patchStep(id, { status: 'skipped', skipReason: reason });
+    router.refresh();
   };
 
   const markStepReverted = async (id: number, reason?: string) => {
     const { markStepReverted } = await import('@/lib/actions/customer-steps');
     await markStepReverted(id, reason);
-    handleActionComplete();
+    patchStep(id, { status: 'reverted' });
+    router.refresh();
   };
 
   const overrideStepContent = async (id: number, content: string) => {
     const { overrideStepContent } = await import('@/lib/actions/customer-steps');
     await overrideStepContent(id, content);
-    handleActionComplete();
+    patchStep(id, { content, isOverridden: 1 });
+    router.refresh();
   };
 
   const resetToTemplate = async (id: number) => {
     const { resetToTemplate } = await import('@/lib/actions/customer-steps');
     await resetToTemplate(id);
-    handleActionComplete();
+    patchStep(id, { isOverridden: 0, ...(selectedTemplate ? { content: selectedTemplate.content } : {}) });
+    router.refresh();
   };
 
   const editCustomStep = async (id: number, data: any) => {
     const { editCustomStep } = await import('@/lib/actions/customer-steps');
     await editCustomStep(id, data);
-    handleActionComplete();
+    patchStep(id, { ...data });
+    router.refresh();
   };
 
   const deleteCustomStep = async (id: number) => {
     const { deleteCustomStep } = await import('@/lib/actions/customer-steps');
     await deleteCustomStep(id);
-    handleActionComplete();
-  };
-
-  const addCustomStep = async (customerId: number, customerName: string, existingSteps: any[]) => {
-    // This will be handled by the dialog component
-    return async (data: any) => {
-      const { addCustomStep } = await import('@/lib/actions/customer-steps');
-      await addCustomStep(releaseId, customerId, data);
-      handleActionComplete();
-    };
+    removeStep(id);
+    setIsPanelOpen(false);
+    router.refresh();
   };
 
   if (clusters.length === 0) {
@@ -154,13 +195,13 @@ export function ReleaseMatrixClient({ stepsByCluster, category, releaseId }: Rel
                 </CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="overflow-x-auto">
+                <div className="overflow-auto max-h-[75vh]">
                   <table className="w-full">
                     <thead>
                       <tr className="border-b">
-                        <th className="text-left py-2 px-3 font-medium text-slate-500 w-48 sticky left-0 z-20 bg-white after:absolute after:right-0 after:top-0 after:bottom-0 after:w-px after:bg-slate-200">Step</th>
+                        <th className="text-left py-2 px-3 font-medium text-slate-500 w-48 sticky left-0 top-0 z-30 bg-white after:absolute after:right-0 after:top-0 after:bottom-0 after:w-px after:bg-slate-200">Step</th>
                         {customers.map((customer: any) => (
-                          <th key={customer.customer.id} className="text-center py-2 px-3 font-medium text-slate-500 min-w-[140px]">
+                          <th key={customer.customer.id} className="text-center py-2 px-3 font-medium text-slate-500 min-w-[140px] sticky top-0 z-20 bg-white">
                             <div>{customer.customer.name}</div>
                             <div className="text-xs text-slate-400 font-normal">{customer.customer.namespace}</div>
                             {category === 'verify' && (() => {
@@ -189,7 +230,7 @@ export function ReleaseMatrixClient({ stepsByCluster, category, releaseId }: Rel
                                 onAdd={async (data) => {
                                   const { addCustomStep } = await import('@/lib/actions/customer-steps');
                                   await addCustomStep(releaseId, customer.customer.id, data);
-                                  handleActionComplete();
+                                  router.refresh();
                                 }}
                               />
                             </div>
