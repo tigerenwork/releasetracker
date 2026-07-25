@@ -8,6 +8,7 @@ import { Badge } from '@/components/ui/badge';
 import { Textarea } from '@/components/ui/textarea';
 import { CodeBlock } from './code-block';
 import { JenkinsExecutor } from '@/components/executors/jenkins-executor';
+import { BashExecutor } from '@/components/executors/bash-executor';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
 import {
@@ -310,6 +311,20 @@ export function StepDetailPanel({
             )}
 
             {step.type === 'jenkins' && <Separator />}
+
+            {/* Bash executor: pick pod/container and run the step's commands in-place */}
+            {step.type === 'bash' && (
+              <BashExecutor
+                stepId={step.id}
+                customerId={step.customerId}
+                releaseId={step.releaseId}
+                content={step.content}
+                namespace={step.customer?.namespace || ''}
+                kubeContext={step.customer?.cluster?.name}
+              />
+            )}
+
+            {step.type === 'bash' && <Separator />}
 
             {/* Execution Section */}
             {step.status !== 'done' && step.status !== 'skipped' && (

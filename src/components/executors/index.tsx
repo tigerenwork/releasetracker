@@ -12,6 +12,8 @@ export { SQLStepExecutor } from './sql-executor';
 export { RESTStepExecutor } from './rest-executor';
 export { ScriptStepExecutor } from './script-executor';
 export { TextStepDisplay } from './text-display';
+export { BashExecutor } from './bash-executor';
+export { JenkinsExecutor } from './jenkins-executor';
 
 // Re-export types
 export type {
