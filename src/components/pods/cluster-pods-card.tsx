@@ -225,7 +225,7 @@ export function ClusterPodsCard({ clusterName, customers, releaseId = 0 }: Clust
                       <div className="text-sm font-medium">{customer.name}</div>
                       <div className="text-xs text-slate-400 font-mono">{customer.namespace}</div>
                     </div>
-                    <div className="flex-1">{renderSummary(customer.id)}</div>
+                    <div className="flex-1 min-w-0">{renderSummary(customer.id)}</div>
                     <Button
                       variant="ghost"
                       size="sm"
