@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { Edit, Trash2 } from 'lucide-react';
+import { Edit, Trash2, Globe } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
   AlertDialog,
@@ -45,6 +45,13 @@ export function CustomerListItem({ customer }: CustomerListItemProps) {
         {customer.namespace}
       </div>
       <div className="flex items-center gap-1 ml-auto">
+        {customer.websiteUrl && (
+          <a href={customer.websiteUrl} target="_blank" rel="noopener noreferrer" title={customer.websiteUrl}>
+            <Button variant="ghost" size="icon" className="h-8 w-8">
+              <Globe className="w-4 h-4" />
+            </Button>
+          </a>
+        )}
         <Link href={`/customers/${customer.id}/edit`}>
           <Button variant="ghost" size="icon" className="h-8 w-8">
             <Edit className="w-4 h-4" />

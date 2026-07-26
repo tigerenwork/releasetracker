@@ -10,11 +10,20 @@ export type CustomerInput = {
   namespace: string;
   name: string;
   description?: string;
+  websiteUrl?: string;
 };
+
+// Bare hostnames get https:// so the stored value is always navigable
+function normalizeWebsiteUrl(url?: string) {
+  const trimmed = url?.trim();
+  if (!trimmed) return undefined;
+  return /^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`;
+}
 
 export async function createCustomer(data: CustomerInput) {
   const [customer] = await db.insert(customers).values({
     ...data,
+    websiteUrl: normalizeWebsiteUrl(data.websiteUrl) ?? null,
     isActive: true,
   }).returning();
   revalidatePath('/customers');
@@ -23,9 +32,15 @@ export async function createCustomer(data: CustomerInput) {
 }
 
 export async function updateCustomer(id: number, data: Partial<CustomerInput>) {
+  const { websiteUrl, ...rest } = data;
+  const set: Record<string, any> = { ...rest, updatedAt: new Date() };
+  // The form always sends the field, so undefined means "cleared"
+  if ('websiteUrl' in data) {
+    set.websiteUrl = normalizeWebsiteUrl(websiteUrl) ?? null;
+  }
   const [customer] = await db
     .update(customers)
-    .set({ ...data, updatedAt: new Date() })
+    .set(set)
     .where(eq(customers.id, id))
     .returning();
   revalidatePath('/customers');

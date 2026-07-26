@@ -47,6 +47,7 @@ export function CustomerForm({ customer, clusters, jenkinsConfig, isEdit = false
         namespace: formData.get('namespace') as string,
         name: formData.get('name') as string,
         description: formData.get('description') as string || undefined,
+        websiteUrl: formData.get('websiteUrl') as string || undefined,
       };
 
       if (isEdit && customer) {
@@ -137,6 +138,19 @@ export function CustomerForm({ customer, clusters, jenkinsConfig, isEdit = false
               placeholder="Description of this customer..."
               rows={3}
             />
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="websiteUrl">Website URL</Label>
+            <Input
+              id="websiteUrl"
+              name="websiteUrl"
+              defaultValue={customer?.websiteUrl || ''}
+              placeholder="e.g., https://acme.example.com"
+            />
+            <p className="text-sm text-slate-500">
+              Link to the customer&apos;s deployment; https:// is added if omitted
+            </p>
           </div>
 
           {isEdit && (

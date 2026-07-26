@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { Users, Edit, Trash2, Server } from 'lucide-react';
+import { Users, Edit, Trash2, Server, Globe } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import {
@@ -49,6 +49,13 @@ export function CustomerCard({ customer }: CustomerCardProps) {
             </div>
           </div>
           <div className="flex gap-1">
+            {customer.websiteUrl && (
+              <a href={customer.websiteUrl} target="_blank" rel="noopener noreferrer" title={customer.websiteUrl}>
+                <Button variant="ghost" size="icon" className="h-8 w-8">
+                  <Globe className="w-4 h-4" />
+                </Button>
+              </a>
+            )}
             <Link href={`/customers/${customer.id}/edit`}>
               <Button variant="ghost" size="icon" className="h-8 w-8">
                 <Edit className="w-4 h-4" />

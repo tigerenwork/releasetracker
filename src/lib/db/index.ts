@@ -114,6 +114,7 @@ const CREATE_TABLES_SQL = `
     namespace TEXT NOT NULL,
     name TEXT NOT NULL,
     description TEXT,
+    website_url TEXT,
     is_active INTEGER DEFAULT 1,
     metadata TEXT,
     created_at INTEGER DEFAULT (unixepoch() * 1000),
@@ -383,6 +384,12 @@ function migrateSqlite(client: Database.Database) {
     client.exec('ALTER TABLE customer_execution_configs ADD COLUMN jenkins_config TEXT');
   }
 
+  // 4. Add customers.website_url if missing
+  const customerColumns = client.prepare('PRAGMA table_info(customers)').all() as { name: string }[];
+  if (!customerColumns.some((c) => c.name === 'website_url')) {
+    client.exec('ALTER TABLE customers ADD COLUMN website_url TEXT');
+  }
+
   // 4. Rebuild tables with stale CHECK constraints or a bad column DEFAULT
   const ddlOf = (table: string) =>
     (client.prepare('SELECT sql FROM sqlite_master WHERE name = ?').get(table) as { sql?: string } | undefined)?.sql || '';
@@ -425,6 +432,12 @@ async function migrateTurso(client: ReturnType<typeof createClient>) {
   const configColumns = await client.execute('PRAGMA table_info(customer_execution_configs)');
   if (!configColumns.rows.some((c) => c.name === 'jenkins_config')) {
     await client.execute('ALTER TABLE customer_execution_configs ADD COLUMN jenkins_config TEXT');
+  }
+
+  // 4. Add customers.website_url if missing
+  const customerColumns = await client.execute('PRAGMA table_info(customers)');
+  if (!customerColumns.rows.some((c) => c.name === 'website_url')) {
+    await client.execute('ALTER TABLE customers ADD COLUMN website_url TEXT');
   }
 
   // 4. Rebuild tables with stale CHECK constraints or a bad column DEFAULT

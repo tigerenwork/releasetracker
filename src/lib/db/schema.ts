@@ -24,6 +24,7 @@ export const customers = sqliteTable('customers', {
   namespace: text('namespace').notNull(),
   name: text('name').notNull(),
   description: text('description'),
+  websiteUrl: text('website_url'),
   isActive: integer('is_active', { mode: 'boolean' }).default(true),
   metadata: text('metadata', { mode: 'json' }).$type<Record<string, any>>(),
   createdAt: integer('created_at', { mode: 'timestamp' }).$defaultFn(() => new Date()),
