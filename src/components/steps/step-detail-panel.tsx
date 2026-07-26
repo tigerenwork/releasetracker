@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { X, RotateCcw, Pencil, Trash2, FileText, AlertCircle, CheckCircle, Check, SkipForward, Copy } from 'lucide-react';
+import { X, RotateCcw, Pencil, Trash2, FileText, AlertCircle, CheckCircle, Check, SkipForward, Copy, Globe } from 'lucide-react';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -230,6 +230,17 @@ export function StepDetailPanel({
               <SheetTitle className="text-xl mb-2">{step.name}</SheetTitle>
               <div className="flex items-center gap-2 text-sm text-slate-500">
                 <span>{step.customer?.name}</span>
+                {step.customer?.websiteUrl && (
+                  <a
+                    href={step.customer.websiteUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    title={step.customer.websiteUrl}
+                    className="text-slate-400 hover:text-blue-600"
+                  >
+                    <Globe className="w-4 h-4" />
+                  </a>
+                )}
                 <span>•</span>
                 <span>{step.customer?.cluster?.name}</span>
                 <span>•</span>
