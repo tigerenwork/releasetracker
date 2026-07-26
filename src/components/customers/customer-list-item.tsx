@@ -45,12 +45,15 @@ export function CustomerListItem({ customer }: CustomerListItemProps) {
         {customer.namespace}
       </div>
       <div className="flex items-center gap-1 ml-auto">
-        {customer.websiteUrl && (
+        {/* Fixed-width slot keeps the action column aligned across rows */}
+        {customer.websiteUrl ? (
           <a href={customer.websiteUrl} target="_blank" rel="noopener noreferrer" title={customer.websiteUrl}>
             <Button variant="ghost" size="icon" className="h-8 w-8">
               <Globe className="w-4 h-4" />
             </Button>
           </a>
+        ) : (
+          <span className="h-8 w-8" />
         )}
         <Link href={`/customers/${customer.id}/edit`}>
           <Button variant="ghost" size="icon" className="h-8 w-8">
