@@ -117,22 +117,22 @@ export function ClusterPodsCard({ clusterName, customers, releaseId = 0 }: Clust
     return (
       <div className="flex items-center gap-2 min-w-0">
         <Badge
-          className={
+          className={`shrink-0 ${
             allHealthy
               ? 'bg-green-100 text-green-700 hover:bg-green-100'
               : 'bg-red-100 text-red-700 hover:bg-red-100'
-          }
+          }`}
         >
           {running}/{pods.length} Running
         </Badge>
         {restarts > 0 && (
-          <span className="text-xs text-amber-600 font-medium whitespace-nowrap">
+          <span className="text-xs text-amber-600 font-medium whitespace-nowrap shrink-0">
             {restarts} restarts
           </span>
         )}
         {!allHealthy && (
           <span
-            className="text-xs text-red-600 truncate"
+            className="text-xs text-red-600 truncate flex-1 min-w-0"
             title={unhealthy.map((p) => `${p.name}: ${p.status}`).join('\n')}
           >
             {unhealthy
