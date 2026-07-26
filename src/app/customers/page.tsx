@@ -16,7 +16,8 @@ interface CustomersPageProps {
 
 export default async function CustomersPage({ searchParams }: CustomersPageProps) {
   const { view } = await searchParams;
-  const currentView: 'grid' | 'list' = view === 'list' ? 'list' : 'grid';
+  // List is the default view; grid is opt-in via ?view=grid
+  const currentView: 'grid' | 'list' = view === 'grid' ? 'grid' : 'list';
 
   const [customers, clusters] = await Promise.all([
     listCustomers(),

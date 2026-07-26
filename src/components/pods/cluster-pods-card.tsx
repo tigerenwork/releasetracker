@@ -30,6 +30,11 @@ export function ClusterPodsCard({ clusterName, customers, releaseId = 0 }: Clust
   // Cluster-level collapse: the whole customer list under this cluster
   const [isOpen, setIsOpen] = useState(true);
 
+  // Deterministic order by namespace (fall back to name when unset)
+  const sortedCustomers = [...customers].sort((a, b) =>
+    (a.namespace || a.name).localeCompare(b.namespace || b.name)
+  );
+
   // agentBridge only exists in the browser; defer the check until after
   // mount so server-rendered HTML matches the first client render
   const [mounted, setMounted] = useState(false);
@@ -80,7 +85,7 @@ export function ClusterPodsCard({ clusterName, customers, releaseId = 0 }: Clust
 
   const refreshAll = async () => {
     setIsRefreshingAll(true);
-    for (const customer of customers) {
+    for (const customer of sortedCustomers) {
       await refreshCustomer(customer);
     }
     setIsRefreshingAll(false);
@@ -194,7 +199,7 @@ export function ClusterPodsCard({ clusterName, customers, releaseId = 0 }: Clust
           </p>
         ) : (
           <div className="divide-y">
-            {customers.map((customer) => {
+            {sortedCustomers.map((customer) => {
               const state = states[customer.id];
               const isExpanded = !!expanded[customer.id];
               const hasPods = state?.status === 'loaded' && (state.pods?.length || 0) > 0;
