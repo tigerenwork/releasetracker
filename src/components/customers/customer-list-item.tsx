@@ -44,7 +44,7 @@ export function CustomerListItem({ customer }: CustomerListItemProps) {
       <div className="text-sm text-slate-600 w-40 truncate hidden sm:block">
         {customer.namespace}
       </div>
-      <div className="flex items-center gap-1 ml-auto">
+      <div className="flex items-center gap-1 ml-auto w-28 justify-end">
         {/* Fixed-width slot keeps the action column aligned across rows */}
         {customer.websiteUrl ? (
           <a href={customer.websiteUrl} target="_blank" rel="noopener noreferrer" title={customer.websiteUrl}>

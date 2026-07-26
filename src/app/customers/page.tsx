@@ -89,7 +89,7 @@ export default async function CustomersPage({ searchParams }: CustomersPageProps
                   <div className="flex items-center gap-4 px-4 py-2 bg-slate-50 border-b text-xs font-medium text-slate-500 uppercase tracking-wide">
                     <span className="flex-1">Name</span>
                     <span className="w-40 hidden sm:block">Namespace</span>
-                    <span className="w-20 ml-auto">Actions</span>
+                    <span className="w-28 ml-auto text-right">Actions</span>
                   </div>
                   {group.customers.map((customer) => (
                     <CustomerListItem key={customer.id} customer={customer} />
