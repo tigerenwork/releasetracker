@@ -16,19 +16,23 @@ import { formatRelativeTime, statusBadgeClass } from '@/components/pods/pod-util
 import { ContainerCommandDialog } from '@/components/pods/container-command-dialog';
 import { ContainerShellDialog } from '@/components/pods/container-shell-dialog';
 import { ContainerLogsDialog } from '@/components/pods/container-logs-dialog';
+import { PodRestartDialog } from '@/components/pods/pod-restart-dialog';
 
 interface PodTableProps {
   pods: PodInfo[];
   /** When provided, container rows get a "run command" action */
   namespace?: string;
   kubeContext?: string;
+  /** When provided (with namespace), pod rows get a restart action */
+  onPodsChanged?: () => void;
 }
 
 /**
  * Pod status table with expandable per-container details
  */
-export function PodTable({ pods, namespace, kubeContext }: PodTableProps) {
+export function PodTable({ pods, namespace, kubeContext, onPodsChanged }: PodTableProps) {
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
+  const showRestart = !!namespace && !!onPodsChanged;
 
   const toggle = (podName: string) => {
     setExpanded((prev) => ({ ...prev, [podName]: !prev[podName] }));
@@ -49,6 +53,7 @@ export function PodTable({ pods, namespace, kubeContext }: PodTableProps) {
           <TableHead>Last Restart</TableHead>
           <TableHead>Age</TableHead>
           <TableHead>IP</TableHead>
+          {showRestart && <TableHead className="w-12"></TableHead>}
         </TableRow>
       </TableHeader>
       <TableBody>
@@ -84,12 +89,22 @@ export function PodTable({ pods, namespace, kubeContext }: PodTableProps) {
                 <TableCell>{formatRelativeTime(pod.lastRestartAt)}</TableCell>
                 <TableCell>{formatRelativeTime(pod.createdAt)}</TableCell>
                 <TableCell className="font-mono text-xs">{pod.ip || '—'}</TableCell>
+                {showRestart && (
+                  <TableCell>
+                    <PodRestartDialog
+                      kubeContext={kubeContext}
+                      namespace={namespace}
+                      podName={pod.name}
+                      onRestarted={onPodsChanged}
+                    />
+                  </TableCell>
+                )}
               </TableRow>
 
               {isExpanded && containers.length > 0 && (
                 <TableRow className="bg-slate-50 hover:bg-slate-50">
                   <TableCell></TableCell>
-                  <TableCell colSpan={7} className="py-2">
+                  <TableCell colSpan={showRestart ? 8 : 7} className="py-2">
                     <div className="rounded-md border bg-white">
                       <Table>
                         <TableHeader>

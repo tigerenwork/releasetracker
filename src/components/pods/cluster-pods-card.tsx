@@ -249,6 +249,7 @@ export function ClusterPodsCard({ clusterName, customers, releaseId = 0 }: Clust
                         pods={state.pods!}
                         namespace={customer.namespace}
                         kubeContext={clusterName}
+                        onPodsChanged={() => refreshCustomer(customer)}
                       />
                     </div>
                   )}

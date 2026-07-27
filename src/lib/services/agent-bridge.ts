@@ -68,7 +68,7 @@ export interface PortForwardInfo {
 
 export interface ExecutionRequest {
   id: string;
-  type: 'sql' | 'rest' | 'script' | 'pods' | 'logs';
+  type: 'sql' | 'rest' | 'script' | 'pods' | 'logs' | 'restart';
   context: ExecutionContext;
   timeout?: number;
   sql?: SQLExecutionConfig;
@@ -129,7 +129,7 @@ export interface ShellSession {
 export interface ExecutionResult {
   success: boolean;
   executionId: string;
-  type: 'sql' | 'rest' | 'script' | 'pods';
+  type: 'sql' | 'rest' | 'script' | 'pods' | 'restart';
   exitCode?: number;
   duration: number;
   timestamp: string;
@@ -160,6 +160,10 @@ export interface ExecutionResult {
     exitCode: number;
     command: string;
   };
+  restart?: {
+    stdout: string;
+    stderr: string;
+  };
   error?: {
     code: string;
     message: string;
@@ -182,6 +186,9 @@ export const MIN_AGENT_VERSION = '1.1.0';
 /** Minimum agent version that supports port-forward proxies */
 export const PORT_FORWARD_MIN_VERSION = '1.2.0';
 
+/** Minimum agent version that supports pod restart */
+export const RESTART_MIN_VERSION = '1.3.0';
+
 /** Compare two semver-ish versions: -1 / 0 / 1 */
 function compareVersions(a: string, b: string): number {
   const pa = a.split('.').map(Number);
@@ -196,6 +203,11 @@ function compareVersions(a: string, b: string): number {
 /** True when the connected agent supports port-forward proxies */
 export function supportsPortForward(version?: string): boolean {
   return !!version && compareVersions(version, PORT_FORWARD_MIN_VERSION) >= 0;
+}
+
+/** True when the connected agent supports pod restart */
+export function supportsRestart(version?: string): boolean {
+  return !!version && compareVersions(version, RESTART_MIN_VERSION) >= 0;
 }
 
 class AgentBridge {
@@ -370,6 +382,19 @@ class AgentBridge {
     return this.execute({
       id: `pods-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
       type: 'pods',
+      context,
+      timeout,
+    });
+  }
+
+  /**
+   * Restart a pod by deleting it (the workload controller recreates it).
+   * Requires agent >= 1.3.0.
+   */
+  async restartPod(context: ExecutionContext, timeout = 60): Promise<ExecutionResult> {
+    return this.execute({
+      id: `restart-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+      type: 'restart',
       context,
       timeout,
     });

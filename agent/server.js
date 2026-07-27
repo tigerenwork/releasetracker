@@ -8,6 +8,8 @@
  * - sql: Execute SQL queries via database client pods
  * - rest: Execute REST API calls via curl in pods
  * - script: Execute custom scripts in pods
+ * - pods: List pods with status details
+ * - restart: Restart a pod by deleting it (controller recreates it)
  * 
  * Usage:
  *   AGENT_TOKEN=your-token node server.js
@@ -167,6 +169,10 @@ async function handleExecute(req, res) {
 
         case 'pods':
           result = await podsExecutor.execute(data);
+          break;
+
+        case 'restart':
+          result = await podsExecutor.restart(data);
           break;
 
         default:
@@ -383,7 +389,7 @@ server.listen(PORT, HOST, () => {
 ╚════════════════════════════════════════════════════════╝
   `);
   logger.info('Agent started and ready for connections');
-  logger.info('Supported execution types: sql, rest, script, pods, portforward');
+  logger.info('Supported execution types: sql, rest, script, pods, restart, portforward');
   checkKubectl();
 });
 

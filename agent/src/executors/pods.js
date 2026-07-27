@@ -68,6 +68,64 @@ class PodsExecutor {
   }
 
   /**
+   * Restart a pod by deleting it (the workload controller recreates it)
+   * @param {import('../types').ExecutionRequest} request
+   * @returns {Promise<import('../types').ExecutionResponse>}
+   */
+  async restart(request) {
+    const { context, id, timeout = 60 } = request;
+    const startTime = Date.now();
+
+    try {
+      if (!context.podName) {
+        throw new Error('podName is required for restart');
+      }
+
+      logger.info(`[Pods] Restarting (delete) pod: context=${context.kubeContext || 'current'}, namespace=${context.namespace}, pod=${context.podName}`);
+
+      const args = [
+        'delete', 'pod', context.podName,
+        ...(context.kubeContext ? ['--context', context.kubeContext] : []),
+        '-n', context.namespace
+      ];
+
+      const { stdout, stderr, exitCode } = await this.execKubectl(args, timeout);
+
+      return {
+        success: exitCode === 0,
+        executionId: id,
+        type: 'restart',
+        exitCode,
+        duration: Date.now() - startTime,
+        timestamp: new Date().toISOString(),
+        restart: {
+          stdout: stdout.slice(0, 2000),
+          stderr: stderr.slice(0, 2000)
+        },
+        error: exitCode !== 0 ? {
+          code: 'RESTART_FAILED',
+          message: stderr || 'kubectl delete pod failed',
+          details: { exitCode }
+        } : undefined
+      };
+    } catch (err) {
+      logger.error('[Pods] Restart failed:', err.message);
+      return {
+        success: false,
+        executionId: id,
+        type: 'restart',
+        duration: Date.now() - startTime,
+        timestamp: new Date().toISOString(),
+        error: {
+          code: 'EXECUTION_FAILED',
+          message: err.message,
+          details: err.stack
+        }
+      };
+    }
+  }
+
+  /**
    * Extract status details from a pod object
    */
   parsePod(pod) {
