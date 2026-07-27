@@ -9,7 +9,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from '@/components/ui/dialog';
-import { Eraser, Loader2, ScrollText } from 'lucide-react';
+import { Eraser, Loader2, ScrollText, Download } from 'lucide-react';
 import { agentBridge } from '@/lib/services/agent-bridge';
 
 interface ContainerLogsDialogProps {
@@ -59,6 +59,18 @@ export function ContainerLogsDialog({
     cancelRef.current?.();
     cancelRef.current = null;
   }, []);
+
+  // Save whatever has been streamed so far (capped buffer) as a .log file
+  const handleDownload = useCallback(() => {
+    if (!logs) return;
+    const blob = new Blob([logs], { type: 'text/plain;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${podName}-${containerName}-${new Date().toISOString().replace(/[:.]/g, '-')}.log`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }, [logs, podName, containerName]);
 
   const start = useCallback(() => {
     if (!agentBridge) return;
@@ -179,6 +191,16 @@ export function ContainerLogsDialog({
 
             <Button variant="ghost" size="sm" onClick={() => setLogs('')} title="Clear">
               <Eraser className="h-4 w-4" />
+            </Button>
+
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={handleDownload}
+              disabled={!logs}
+              title="Download streamed logs"
+            >
+              <Download className="h-4 w-4" />
             </Button>
 
             <label className="ml-auto flex items-center gap-1.5 text-xs text-slate-500">
