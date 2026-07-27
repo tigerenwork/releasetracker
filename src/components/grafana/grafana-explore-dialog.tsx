@@ -38,6 +38,7 @@ const RANGES = [
   { value: 'now-1h', label: 'Last 1 hour' },
   { value: 'now-6h', label: 'Last 6 hours' },
   { value: 'now-24h', label: 'Last 24 hours' },
+  { value: 'custom', label: 'Custom…' },
 ];
 
 /**
@@ -52,6 +53,9 @@ export function GrafanaExploreDialog({ cluster, namespace, defaultApp, apps }: G
   const [app, setApp] = useState(defaultApp || '');
   const [lineContains, setLineContains] = useState('');
   const [range, setRange] = useState('now-1h');
+  // Custom absolute range (datetime-local values)
+  const [customFrom, setCustomFrom] = useState('');
+  const [customTo, setCustomTo] = useState('');
   const appsDatalistId = useId();
 
   useEffect(() => {
@@ -63,15 +67,22 @@ export function GrafanaExploreDialog({ cluster, namespace, defaultApp, apps }: G
 
   const configured = !!settings?.baseUrl && !!settings?.datasourceUid;
 
+  const customRangeValid =
+    range !== 'custom' ||
+    (!!customFrom && !!customTo && new Date(customFrom).getTime() < new Date(customTo).getTime());
+
   const handleOpen = () => {
-    if (!settings) return;
+    if (!settings || !customRangeValid) return;
     const expr = buildLogExpr({
       app: app.trim() || undefined,
       cluster,
       namespace,
       lineContains,
     });
-    const url = buildGrafanaExploreUrl(settings, { expr, from: range });
+    // Grafana accepts relative ranges ('now-1h') and epoch-ms strings alike
+    const from = range === 'custom' ? String(new Date(customFrom).getTime()) : range;
+    const to = range === 'custom' ? String(new Date(customTo).getTime()) : 'now';
+    const url = buildGrafanaExploreUrl(settings, { expr, from, to });
     window.open(url, '_blank', 'noopener,noreferrer');
     setOpen(false);
   };
@@ -147,9 +158,32 @@ export function GrafanaExploreDialog({ cluster, namespace, defaultApp, apps }: G
             </Select>
           </div>
 
+          {range === 'custom' && (
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="grafana-from">From</Label>
+                <Input
+                  id="grafana-from"
+                  type="datetime-local"
+                  value={customFrom}
+                  onChange={(e) => setCustomFrom(e.target.value)}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="grafana-to">To</Label>
+                <Input
+                  id="grafana-to"
+                  type="datetime-local"
+                  value={customTo}
+                  onChange={(e) => setCustomTo(e.target.value)}
+                />
+              </div>
+            </div>
+          )}
+
           <div className="flex justify-end gap-2">
             <Button variant="outline" onClick={() => setOpen(false)}>Cancel</Button>
-            <Button onClick={handleOpen}>Open in Grafana</Button>
+            <Button onClick={handleOpen} disabled={!customRangeValid}>Open in Grafana</Button>
           </div>
         </div>
       </DialogContent>
