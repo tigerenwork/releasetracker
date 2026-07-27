@@ -6,9 +6,11 @@ import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { ChevronDown, ChevronRight, Loader2, RefreshCw } from 'lucide-react';
 import { agentBridge, type PodInfo } from '@/lib/services/agent-bridge';
+import { appFromPodName } from '@/lib/grafana';
 import { formatRelativeTime, isUnhealthy } from '@/components/pods/pod-utils';
 import { PodTable } from '@/components/pods/pod-table';
 import { PortForwardPanel } from '@/components/pods/port-forward-panel';
+import { GrafanaExploreDialog } from '@/components/grafana/grafana-explore-dialog';
 
 interface ClusterPodsCardProps {
   clusterName: string;
@@ -226,6 +228,15 @@ export function ClusterPodsCard({ clusterName, customers, releaseId = 0 }: Clust
                       <div className="text-xs text-slate-400 font-mono">{customer.namespace}</div>
                     </div>
                     <div className="flex-1 min-w-0">{renderSummary(customer.id)}</div>
+                    <GrafanaExploreDialog
+                      cluster={clusterName}
+                      namespace={customer.namespace}
+                      apps={
+                        state?.pods
+                          ? [...new Set(state.pods.map((p) => appFromPodName(p.name)))].sort()
+                          : undefined
+                      }
+                    />
                     <Button
                       variant="ghost"
                       size="sm"

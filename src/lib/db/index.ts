@@ -241,6 +241,14 @@ const CREATE_TABLES_SQL = `
     created_at INTEGER DEFAULT (unixepoch() * 1000),
     updated_at INTEGER DEFAULT (unixepoch() * 1000)
   );
+
+  CREATE TABLE IF NOT EXISTS grafana_settings (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    base_url TEXT NOT NULL,
+    datasource_uid TEXT,
+    created_at INTEGER DEFAULT (unixepoch() * 1000),
+    updated_at INTEGER DEFAULT (unixepoch() * 1000)
+  );
 `;
 
 // Backfill SQL: populate release_customers from existing customer_steps for already-active releases

@@ -228,6 +228,15 @@ export const jenkinsSettings = sqliteTable('jenkins_settings', {
   updatedAt: integer('updated_at', { mode: 'timestamp' }).$defaultFn(() => new Date()),
 });
 
+// ==================== Grafana Settings (singleton row) ====================
+export const grafanaSettings = sqliteTable('grafana_settings', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  baseUrl: text('base_url').notNull(),
+  datasourceUid: text('datasource_uid'),
+  createdAt: integer('created_at', { mode: 'timestamp' }).$defaultFn(() => new Date()),
+  updatedAt: integer('updated_at', { mode: 'timestamp' }).$defaultFn(() => new Date()),
+});
+
 // ==================== Release Customers (enrollment) ====================
 export const releaseCustomers = sqliteTable('release_customers', {
   releaseId: integer('release_id').notNull().references(() => releases.id, { onDelete: 'cascade' }),

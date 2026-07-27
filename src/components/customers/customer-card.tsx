@@ -16,6 +16,7 @@ import {
   AlertDialogTrigger,
 } from '@/components/ui/alert-dialog';
 import { deleteCustomer } from '@/lib/actions/customers';
+import { GrafanaExploreDialog } from '@/components/grafana/grafana-explore-dialog';
 import type { Customer } from '@/lib/db/schema';
 
 interface CustomerCardProps {
@@ -49,6 +50,10 @@ export function CustomerCard({ customer }: CustomerCardProps) {
             </div>
           </div>
           <div className="flex gap-1">
+            <GrafanaExploreDialog
+              cluster={customer.cluster?.name}
+              namespace={customer.namespace}
+            />
             {customer.websiteUrl && (
               <a href={customer.websiteUrl} target="_blank" rel="noopener noreferrer" title={customer.websiteUrl}>
                 <Button variant="ghost" size="icon" className="h-8 w-8">

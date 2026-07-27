@@ -12,11 +12,13 @@ import {
 } from '@/components/ui/table';
 import { ChevronDown, ChevronRight } from 'lucide-react';
 import type { PodInfo } from '@/lib/services/agent-bridge';
+import { appFromPodName } from '@/lib/grafana';
 import { formatRelativeTime, statusBadgeClass } from '@/components/pods/pod-utils';
 import { ContainerCommandDialog } from '@/components/pods/container-command-dialog';
 import { ContainerShellDialog } from '@/components/pods/container-shell-dialog';
 import { ContainerLogsDialog } from '@/components/pods/container-logs-dialog';
 import { PodRestartDialog } from '@/components/pods/pod-restart-dialog';
+import { GrafanaExploreDialog } from '@/components/grafana/grafana-explore-dialog';
 
 interface PodTableProps {
   pods: PodInfo[];
@@ -32,7 +34,7 @@ interface PodTableProps {
  */
 export function PodTable({ pods, namespace, kubeContext, onPodsChanged }: PodTableProps) {
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
-  const showRestart = !!namespace && !!onPodsChanged;
+  const showActions = !!namespace;
 
   const toggle = (podName: string) => {
     setExpanded((prev) => ({ ...prev, [podName]: !prev[podName] }));
@@ -53,7 +55,7 @@ export function PodTable({ pods, namespace, kubeContext, onPodsChanged }: PodTab
           <TableHead>Last Restart</TableHead>
           <TableHead>Age</TableHead>
           <TableHead>IP</TableHead>
-          {showRestart && <TableHead className="w-12"></TableHead>}
+          {showActions && <TableHead className="w-20"></TableHead>}
         </TableRow>
       </TableHeader>
       <TableBody>
@@ -89,14 +91,23 @@ export function PodTable({ pods, namespace, kubeContext, onPodsChanged }: PodTab
                 <TableCell>{formatRelativeTime(pod.lastRestartAt)}</TableCell>
                 <TableCell>{formatRelativeTime(pod.createdAt)}</TableCell>
                 <TableCell className="font-mono text-xs">{pod.ip || '—'}</TableCell>
-                {showRestart && (
+                {showActions && (
                   <TableCell>
-                    <PodRestartDialog
-                      kubeContext={kubeContext}
-                      namespace={namespace}
-                      podName={pod.name}
-                      onRestarted={onPodsChanged}
-                    />
+                    <div className="flex items-center">
+                      <GrafanaExploreDialog
+                        cluster={kubeContext}
+                        namespace={namespace}
+                        defaultApp={appFromPodName(pod.name)}
+                      />
+                      {onPodsChanged && (
+                        <PodRestartDialog
+                          kubeContext={kubeContext}
+                          namespace={namespace}
+                          podName={pod.name}
+                          onRestarted={onPodsChanged}
+                        />
+                      )}
+                    </div>
                   </TableCell>
                 )}
               </TableRow>
@@ -104,7 +115,7 @@ export function PodTable({ pods, namespace, kubeContext, onPodsChanged }: PodTab
               {isExpanded && containers.length > 0 && (
                 <TableRow className="bg-slate-50 hover:bg-slate-50">
                   <TableCell></TableCell>
-                  <TableCell colSpan={showRestart ? 8 : 7} className="py-2">
+                  <TableCell colSpan={showActions ? 8 : 7} className="py-2">
                     <div className="rounded-md border bg-white">
                       <Table>
                         <TableHeader>
