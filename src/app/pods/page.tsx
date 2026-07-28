@@ -30,6 +30,7 @@ export default async function PodsPage() {
                 id: c.id,
                 name: c.name,
                 namespace: c.namespace,
+                websiteUrl: c.websiteUrl,
               }))}
             />
           ))}
