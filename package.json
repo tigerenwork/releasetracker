@@ -8,7 +8,8 @@
     "prebuild": "tsx scripts/migrate.ts",
     "start": "next start",
     "lint": "eslint",
-    "migrate": "drizzle-kit push"
+    "migrate": "drizzle-kit push",
+    "zip:extension": "mkdir -p public/downloads && cd extension && zip -r ../public/downloads/release-tracker-extension.zip . -x '.*' '**/.DS_Store'"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",
