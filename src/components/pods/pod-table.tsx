@@ -18,6 +18,7 @@ import { ContainerCommandDialog } from '@/components/pods/container-command-dial
 import { ContainerShellDialog } from '@/components/pods/container-shell-dialog';
 import { ContainerLogsDialog } from '@/components/pods/container-logs-dialog';
 import { PodRestartDialog } from '@/components/pods/pod-restart-dialog';
+import { ConfigEditorDialog } from '@/components/pods/config-editor-dialog';
 import { GrafanaExploreDialog } from '@/components/grafana/grafana-explore-dialog';
 
 interface PodTableProps {
@@ -55,7 +56,7 @@ export function PodTable({ pods, namespace, kubeContext, onPodsChanged }: PodTab
           <TableHead>Last Restart</TableHead>
           <TableHead>Age</TableHead>
           <TableHead>IP</TableHead>
-          {showActions && <TableHead className="w-20"></TableHead>}
+          {showActions && <TableHead className="w-28"></TableHead>}
         </TableRow>
       </TableHeader>
       <TableBody>
@@ -98,6 +99,12 @@ export function PodTable({ pods, namespace, kubeContext, onPodsChanged }: PodTab
                         cluster={kubeContext}
                         namespace={namespace}
                         defaultApp={appFromPodName(pod.name)}
+                      />
+                      <ConfigEditorDialog
+                        kubeContext={kubeContext}
+                        namespace={namespace}
+                        podName={pod.name}
+                        onSaved={onPodsChanged}
                       />
                       {onPodsChanged && (
                         <PodRestartDialog

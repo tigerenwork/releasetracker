@@ -237,6 +237,25 @@ export const grafanaSettings = sqliteTable('grafana_settings', {
   updatedAt: integer('updated_at', { mode: 'timestamp' }).$defaultFn(() => new Date()),
 });
 
+// ==================== ConfigMap Edits ====================
+// Most recent ConfigMap edit per (cluster, namespace, configmap) — last-edit persistence
+export const configMapEdits = sqliteTable('config_map_edits', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  kubeContext: text('kube_context').notNull(),     // cluster name
+  namespace: text('namespace').notNull(),
+  configMapName: text('config_map_name').notNull(),
+  deploymentName: text('deployment_name'),
+  patch: text('patch', { mode: 'json' }).$type<{
+    set: Record<string, string>;
+    delete: string[];
+  }>().notNull(),
+  rolloutRestart: integer('rollout_restart', { mode: 'boolean' }).notNull().default(false),
+  editedAt: integer('edited_at', { mode: 'timestamp' }).notNull(),
+}, (table) => ({
+  uniqueConfigMapEdit: uniqueIndex('unique_config_map_edit')
+    .on(table.kubeContext, table.namespace, table.configMapName),
+}));
+
 // ==================== Release Customers (enrollment) ====================
 export const releaseCustomers = sqliteTable('release_customers', {
   releaseId: integer('release_id').notNull().references(() => releases.id, { onDelete: 'cascade' }),
@@ -275,6 +294,9 @@ export type NewStepExecution = typeof stepExecutions.$inferInsert;
 
 export type ReleaseCustomer = typeof releaseCustomers.$inferSelect;
 export type NewReleaseCustomer = typeof releaseCustomers.$inferInsert;
+
+export type ConfigMapEdit = typeof configMapEdits.$inferSelect;
+export type NewConfigMapEdit = typeof configMapEdits.$inferInsert;
 
 export type JenkinsSettings = typeof jenkinsSettings.$inferSelect;
 export type NewJenkinsSettings = typeof jenkinsSettings.$inferInsert;

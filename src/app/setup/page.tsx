@@ -8,7 +8,7 @@ import { Badge } from '@/components/ui/badge';
 // or a new agent version is published.
 const EXTENSION_VERSION = '1.0.5';
 const AGENT_PACKAGE = '@tigerenwork/agent';
-const AGENT_VERSION = '1.3.0';
+const AGENT_VERSION = '1.4.0';
 
 function Step({ n, children }: { n: number; children: React.ReactNode }) {
   return (

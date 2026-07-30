@@ -44,7 +44,7 @@ Precedence: environment variable → `~/.config/rt-agent/config.json` → defaul
 ## API
 
 - `GET /health` — status, version, uptime, `checks.kubectl` (no auth)
-- `POST /api/v1/execute` — one-shot execution (`sql`, `rest`, `script`, `pods`)
+- `POST /api/v1/execute` — one-shot execution (`sql`, `rest`, `script`, `pods`, `restart`, `config`)
 - `POST /api/v1/execute/stream` — NDJSON streaming (`script`, `logs`)
 - `GET /ws/shell?...&token=` — WebSocket interactive shell
 - `GET /api/v1/portforward` — list active port-forward proxies

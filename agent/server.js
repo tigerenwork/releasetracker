@@ -10,6 +10,7 @@
  * - script: Execute custom scripts in pods
  * - pods: List pods with status details
  * - restart: Restart a pod by deleting it (controller recreates it)
+ * - config: View/edit ConfigMaps consumed by a Deployment
  * 
  * Usage:
  *   AGENT_TOKEN=your-token node server.js
@@ -26,6 +27,7 @@ const { SQLExecutor } = require('./src/executors/sql');
 const { RESTExecutor } = require('./src/executors/rest');
 const { ScriptExecutor } = require('./src/executors/script');
 const { PodsExecutor } = require('./src/executors/pods');
+const { ConfigExecutor } = require('./src/executors/config');
 const { LogsExecutor } = require('./src/executors/logs');
 const { PortForwardManager } = require('./src/executors/portforward');
 const shell = require('./src/shell');
@@ -46,6 +48,7 @@ const sqlExecutor = new SQLExecutor();
 const restExecutor = new RESTExecutor();
 const scriptExecutor = new ScriptExecutor();
 const podsExecutor = new PodsExecutor();
+const configExecutor = new ConfigExecutor();
 const logsExecutor = new LogsExecutor();
 const portForwardManager = new PortForwardManager();
 
@@ -173,6 +176,13 @@ async function handleExecute(req, res) {
 
         case 'restart':
           result = await podsExecutor.restart(data);
+          break;
+
+        case 'config':
+          if (!data.config) {
+            throw new Error('Missing config configuration');
+          }
+          result = await configExecutor.execute(data);
           break;
 
         default:
@@ -389,7 +399,7 @@ server.listen(PORT, HOST, () => {
 ╚════════════════════════════════════════════════════════╝
   `);
   logger.info('Agent started and ready for connections');
-  logger.info('Supported execution types: sql, rest, script, pods, restart, portforward');
+  logger.info('Supported execution types: sql, rest, script, pods, restart, config, portforward');
   checkKubectl();
 });
 

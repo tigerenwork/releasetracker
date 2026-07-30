@@ -35,14 +35,40 @@
  * @property {number} [tailLines]
  * @property {boolean} [timestamps]
  * 
+ * @typedef {Object} ConfigPatch
+ * @property {Object<string, string>} set
+ * @property {string[]} delete
+ * 
+ * @typedef {Object} ConfigExecutionConfig
+ * @property {'describe'|'get'|'apply'|'rolloutRestart'} action
+ * @property {string} [deploymentName]
+ * @property {string} [configMapName]
+ * @property {ConfigPatch} [patch]
+ * 
+ * @typedef {Object} ConfigMapRef
+ * @property {string} name
+ * @property {Array<'envFrom'|'env'|'volume'>} consumedAs
+ * 
+ * @typedef {Object} ConfigResult
+ * @property {string} [deployment]
+ * @property {boolean} [supported]
+ * @property {string} [unsupportedReason]
+ * @property {ConfigMapRef[]} [configMaps]
+ * @property {Object<string, string>} [data]
+ * @property {boolean} [truncated]
+ * @property {number} [appliedKeys]
+ * @property {number} [deletedKeys]
+ * @property {string} [output]
+ * 
  * @typedef {Object} ExecutionRequest
  * @property {string} id
- * @property {'sql'|'rest'|'script'|'pods'} type
+ * @property {'sql'|'rest'|'script'|'pods'|'config'} type
  * @property {ExecutionContext} context
  * @property {number} [timeout]
  * @property {SQLExecutionConfig} [sql]
  * @property {RESTExecutionConfig} [rest]
  * @property {ScriptExecutionConfig} [script]
+ * @property {ConfigExecutionConfig} [config]
  * 
  * @typedef {Object} ContainerInfo
  * @property {string} name
@@ -67,7 +93,7 @@
  * @typedef {Object} ExecutionResponse
  * @property {boolean} success
  * @property {string} executionId
- * @property {'sql'|'rest'|'script'|'pods'} type
+ * @property {'sql'|'rest'|'script'|'pods'|'config'} type
  * @property {number} [exitCode]
  * @property {number} duration
  * @property {string} timestamp
@@ -75,6 +101,7 @@
  * @property {Object} [rest]
  * @property {Object} [script]
  * @property {{count: number, items: PodInfo[]}} [pods]
+ * @property {ConfigResult} [config]
  * @property {Object} [error]
  */
 

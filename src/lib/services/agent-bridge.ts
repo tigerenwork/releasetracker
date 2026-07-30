@@ -45,6 +45,43 @@ export interface LogsExecutionConfig {
   timestamps?: boolean;
 }
 
+export type ConfigAction = 'describe' | 'get' | 'apply' | 'rolloutRestart';
+
+export interface ConfigPatch {
+  set: Record<string, string>;
+  delete: string[];
+}
+
+export interface ConfigPayload {
+  action: ConfigAction;
+  /** describe / rolloutRestart (derived via appFromPodName) */
+  deploymentName?: string;
+  /** get / apply */
+  configMapName?: string;
+  /** apply: diff of data keys */
+  patch?: ConfigPatch;
+}
+
+export interface ConfigMapRef {
+  name: string;
+  consumedAs: Array<'envFrom' | 'env' | 'volume'>;
+}
+
+export interface ConfigResult {
+  // describe
+  deployment?: string;
+  supported?: boolean;
+  unsupportedReason?: string;
+  configMaps?: ConfigMapRef[];
+  // get
+  data?: Record<string, string>;
+  truncated?: boolean;
+  // apply / rolloutRestart
+  appliedKeys?: number;
+  deletedKeys?: number;
+  output?: string;
+}
+
 export interface PortForwardRequest {
   kubeContext?: string;
   namespace: string;
@@ -68,13 +105,14 @@ export interface PortForwardInfo {
 
 export interface ExecutionRequest {
   id: string;
-  type: 'sql' | 'rest' | 'script' | 'pods' | 'logs' | 'restart';
+  type: 'sql' | 'rest' | 'script' | 'pods' | 'logs' | 'restart' | 'config';
   context: ExecutionContext;
   timeout?: number;
   sql?: SQLExecutionConfig;
   rest?: RESTExecutionConfig;
   script?: ScriptExecutionConfig;
   logs?: LogsExecutionConfig;
+  config?: ConfigPayload;
 }
 
 export interface ContainerInfo {
@@ -129,7 +167,7 @@ export interface ShellSession {
 export interface ExecutionResult {
   success: boolean;
   executionId: string;
-  type: 'sql' | 'rest' | 'script' | 'pods' | 'restart';
+  type: 'sql' | 'rest' | 'script' | 'pods' | 'restart' | 'config';
   exitCode?: number;
   duration: number;
   timestamp: string;
@@ -164,6 +202,7 @@ export interface ExecutionResult {
     stdout: string;
     stderr: string;
   };
+  config?: ConfigResult;
   error?: {
     code: string;
     message: string;
@@ -189,6 +228,9 @@ export const PORT_FORWARD_MIN_VERSION = '1.2.0';
 /** Minimum agent version that supports pod restart */
 export const RESTART_MIN_VERSION = '1.3.0';
 
+/** Minimum agent version that supports ConfigMap view/edit (type: 'config') */
+export const CONFIG_EDIT_MIN_VERSION = '1.4.0';
+
 /** Compare two semver-ish versions: -1 / 0 / 1 */
 function compareVersions(a: string, b: string): number {
   const pa = a.split('.').map(Number);
@@ -208,6 +250,11 @@ export function supportsPortForward(version?: string): boolean {
 /** True when the connected agent supports pod restart */
 export function supportsRestart(version?: string): boolean {
   return !!version && compareVersions(version, RESTART_MIN_VERSION) >= 0;
+}
+
+/** True when the connected agent supports ConfigMap view/edit */
+export function supportsConfigEdit(version?: string): boolean {
+  return !!version && compareVersions(version, CONFIG_EDIT_MIN_VERSION) >= 0;
 }
 
 class AgentBridge {
@@ -396,6 +443,77 @@ class AgentBridge {
       id: `restart-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
       type: 'restart',
       context,
+      timeout,
+    });
+  }
+
+  /**
+   * Describe a Deployment: resolve it and list the ConfigMaps it consumes.
+   * Requires agent >= 1.4.0.
+   */
+  async configDescribe(
+    context: ExecutionContext,
+    deploymentName: string,
+    timeout = 30
+  ): Promise<ExecutionResult> {
+    return this.execute({
+      id: `config-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+      type: 'config',
+      context,
+      config: { action: 'describe', deploymentName },
+      timeout,
+    });
+  }
+
+  /**
+   * Read a ConfigMap's data. Requires agent >= 1.4.0.
+   */
+  async configGet(
+    context: ExecutionContext,
+    configMapName: string,
+    timeout = 30
+  ): Promise<ExecutionResult> {
+    return this.execute({
+      id: `config-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+      type: 'config',
+      context,
+      config: { action: 'get', configMapName },
+      timeout,
+    });
+  }
+
+  /**
+   * Apply a merge patch to a ConfigMap's data (set/delete keys).
+   * Requires agent >= 1.4.0.
+   */
+  async configApply(
+    context: ExecutionContext,
+    configMapName: string,
+    patch: ConfigPatch,
+    timeout = 30
+  ): Promise<ExecutionResult> {
+    return this.execute({
+      id: `config-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+      type: 'config',
+      context,
+      config: { action: 'apply', configMapName, patch },
+      timeout,
+    });
+  }
+
+  /**
+   * Rollout restart a single Deployment. Requires agent >= 1.4.0.
+   */
+  async rolloutRestart(
+    context: ExecutionContext,
+    deploymentName: string,
+    timeout = 30
+  ): Promise<ExecutionResult> {
+    return this.execute({
+      id: `config-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+      type: 'config',
+      context,
+      config: { action: 'rolloutRestart', deploymentName },
       timeout,
     });
   }

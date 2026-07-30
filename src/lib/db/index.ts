@@ -249,6 +249,18 @@ const CREATE_TABLES_SQL = `
     created_at INTEGER DEFAULT (unixepoch() * 1000),
     updated_at INTEGER DEFAULT (unixepoch() * 1000)
   );
+
+  CREATE TABLE IF NOT EXISTS config_map_edits (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    kube_context TEXT NOT NULL,
+    namespace TEXT NOT NULL,
+    config_map_name TEXT NOT NULL,
+    deployment_name TEXT,
+    patch TEXT NOT NULL, -- JSON: { set: {...}, delete: [...] }
+    rollout_restart INTEGER NOT NULL DEFAULT 0,
+    edited_at INTEGER NOT NULL,
+    UNIQUE(kube_context, namespace, config_map_name)
+  );
 `;
 
 // Backfill SQL: populate release_customers from existing customer_steps for already-active releases
