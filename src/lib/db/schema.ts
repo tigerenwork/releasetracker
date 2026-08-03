@@ -66,7 +66,7 @@ export const stepTemplates = sqliteTable('step_templates', {
   releaseId: integer('release_id').notNull().references(() => releases.id, { onDelete: 'cascade' }),
   name: text('name').notNull(),
   category: text('category', { enum: ['deploy', 'verify'] }).notNull(),
-  type: text('type', { enum: ['bash', 'sql', 'rest', 'script', 'text', 'jenkins'] }).notNull(),
+  type: text('type', { enum: ['bash', 'sql', 'rest', 'script', 'text', 'jenkins', 'configmap'] }).notNull(),
   content: text('content').notNull(),
   orderIndex: integer('order_index').notNull(),
   description: text('description'),
@@ -93,10 +93,10 @@ export const customerSteps = sqliteTable('customer_steps', {
   // Copied/Overridden fields
   name: text('name').notNull(),
   category: text('category', { enum: ['deploy', 'verify'] }).notNull(),
-  type: text('type', { enum: ['bash', 'sql', 'rest', 'script', 'text', 'jenkins'] }).notNull(),
+  type: text('type', { enum: ['bash', 'sql', 'rest', 'script', 'text', 'jenkins', 'configmap'] }).notNull(),
   content: text('content').notNull(),
   orderIndex: integer('order_index').notNull(),
-  
+
   // Execution tracking
   status: text('status', { enum: ['pending', 'done', 'skipped', 'reverted'] }).default('pending'),
   executedAt: integer('executed_at', { mode: 'timestamp' }),
@@ -302,7 +302,7 @@ export type JenkinsSettings = typeof jenkinsSettings.$inferSelect;
 export type NewJenkinsSettings = typeof jenkinsSettings.$inferInsert;
 
 export type StepCategory = 'deploy' | 'verify';
-export type StepType = 'bash' | 'sql' | 'rest' | 'script' | 'text' | 'jenkins';
+export type StepType = 'bash' | 'sql' | 'rest' | 'script' | 'text' | 'jenkins' | 'configmap';
 export type ReleaseType = 'onboarding' | 'release' | 'hotfix';
 export type ReleaseStatus = 'draft' | 'active' | 'archived';
 export type StepStatus = 'pending' | 'done' | 'skipped' | 'reverted';

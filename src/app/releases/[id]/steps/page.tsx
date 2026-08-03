@@ -37,7 +37,7 @@ interface Step {
   id: number;
   name: string;
   category: 'deploy' | 'verify';
-  type: 'bash' | 'sql' | 'rest' | 'script' | 'text' | 'jenkins';
+  type: 'bash' | 'sql' | 'rest' | 'script' | 'text' | 'jenkins' | 'configmap';
   content: string;
   orderIndex: number;
   description?: string;
@@ -251,6 +251,7 @@ function StepList({ steps, category, releaseId, onUpdate }: StepListProps) {
                   <option value="script">Script</option>
                   <option value="text">Text</option>
                   <option value="jenkins">Jenkins Deploy</option>
+                  <option value="configmap">ConfigMap Env</option>
                 </select>
               </div>
               <div>
@@ -395,6 +396,7 @@ function SortableStepItem({ step, index, onDelete, onUpdate }: SortableStepItemP
                 <option value="script">Script</option>
                 <option value="text">Text</option>
                 <option value="jenkins">Jenkins Deploy</option>
+                <option value="configmap">ConfigMap Env</option>
               </select>
             </div>
             <div>

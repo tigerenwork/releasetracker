@@ -9,6 +9,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { CodeBlock } from './code-block';
 import { JenkinsExecutor } from '@/components/executors/jenkins-executor';
 import { BashExecutor } from '@/components/executors/bash-executor';
+import { ConfigMapExecutor } from '@/components/executors/configmap-executor';
 import { SqlExecutor } from '@/components/executors/sql-step-executor';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
@@ -94,6 +95,7 @@ const typeLabels = {
   script: 'Script',
   text: 'Text',
   jenkins: 'Jenkins Deploy',
+  configmap: 'ConfigMap Env',
 };
 
 export function StepDetailPanel({
@@ -360,6 +362,21 @@ export function StepDetailPanel({
             )}
 
             {step.type === 'sql' && <Separator />}
+
+            {/* ConfigMap executor: set KEY=VALUE env vars on a ConfigMap
+                referenced by the selected pod's Deployment */}
+            {step.type === 'configmap' && (
+              <ConfigMapExecutor
+                stepId={step.id}
+                customerId={step.customerId}
+                releaseId={step.releaseId}
+                content={step.content}
+                namespace={step.customer?.namespace || ''}
+                kubeContext={step.customer?.cluster?.name}
+              />
+            )}
+
+            {step.type === 'configmap' && <Separator />}
 
             {/* Execution Section */}
             {!readOnly && step.status !== 'done' && step.status !== 'skipped' && (

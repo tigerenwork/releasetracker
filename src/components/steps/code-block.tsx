@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button';
 
 interface CodeBlockProps {
   code: string;
-  type: 'bash' | 'sql' | 'rest' | 'script' | 'text' | 'jenkins' | 'branch';
+  type: 'bash' | 'sql' | 'rest' | 'script' | 'text' | 'jenkins' | 'configmap' | 'branch';
   showLineNumbers?: boolean;
 }
 

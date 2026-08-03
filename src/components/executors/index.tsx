@@ -13,6 +13,7 @@ export { RESTStepExecutor } from './rest-executor';
 export { ScriptStepExecutor } from './script-executor';
 export { TextStepDisplay } from './text-display';
 export { BashExecutor } from './bash-executor';
+export { ConfigMapExecutor } from './configmap-executor';
 export { JenkinsExecutor } from './jenkins-executor';
 export { SqlExecutor } from './sql-step-executor';
 

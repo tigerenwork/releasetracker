@@ -141,7 +141,7 @@ const CREATE_TABLES_SQL = `
     release_id INTEGER NOT NULL,
     name TEXT NOT NULL,
     category TEXT NOT NULL CHECK(category IN ('deploy', 'verify')),
-    type TEXT NOT NULL CHECK(type IN ('bash', 'sql', 'rest', 'script', 'text', 'jenkins')),
+    type TEXT NOT NULL CHECK(type IN ('bash', 'sql', 'rest', 'script', 'text', 'jenkins', 'configmap')),
     content TEXT NOT NULL,
     order_index INTEGER NOT NULL,
     description TEXT,
@@ -158,7 +158,7 @@ const CREATE_TABLES_SQL = `
     template_id INTEGER,
     name TEXT NOT NULL,
     category TEXT NOT NULL CHECK(category IN ('deploy', 'verify')),
-    type TEXT NOT NULL CHECK(type IN ('bash', 'sql', 'rest', 'script', 'text', 'jenkins')),
+    type TEXT NOT NULL CHECK(type IN ('bash', 'sql', 'rest', 'script', 'text', 'jenkins', 'configmap')),
     content TEXT NOT NULL,
     order_index INTEGER NOT NULL,
     status TEXT DEFAULT 'pending' CHECK(status IN ('pending', 'done', 'skipped', 'reverted')),
@@ -280,7 +280,7 @@ const STEP_TEMPLATES_DDL = `
     release_id INTEGER NOT NULL,
     name TEXT NOT NULL,
     category TEXT NOT NULL CHECK(category IN ('deploy', 'verify')),
-    type TEXT NOT NULL CHECK(type IN ('bash', 'sql', 'rest', 'script', 'text', 'jenkins')),
+    type TEXT NOT NULL CHECK(type IN ('bash', 'sql', 'rest', 'script', 'text', 'jenkins', 'configmap')),
     content TEXT NOT NULL,
     order_index INTEGER NOT NULL,
     description TEXT,
@@ -299,7 +299,7 @@ const CUSTOMER_STEPS_DDL = `
     template_id INTEGER,
     name TEXT NOT NULL,
     category TEXT NOT NULL CHECK(category IN ('deploy', 'verify')),
-    type TEXT NOT NULL CHECK(type IN ('bash', 'sql', 'rest', 'script', 'text', 'jenkins')),
+    type TEXT NOT NULL CHECK(type IN ('bash', 'sql', 'rest', 'script', 'text', 'jenkins', 'configmap')),
     content TEXT NOT NULL,
     order_index INTEGER NOT NULL,
     status TEXT DEFAULT 'pending' CHECK(status IN ('pending', 'done', 'skipped', 'reverted')),
@@ -371,10 +371,10 @@ const STEP_EXECUTIONS_COLS =
   'id, step_id, customer_id, release_id, type, status, request, exit_code, stdout, stderr, sql_result, rest_result, script_result, started_at, completed_at, duration, created_at';
 
 function rebuildPlanFor(table: string, ddl: string) {
-  if (table === 'step_templates' && (typeCheckLacks(ddl, 'jenkins') || BAD_EXECUTION_CONFIG_DEFAULT.test(ddl))) {
+  if (table === 'step_templates' && (typeCheckLacks(ddl, 'configmap') || BAD_EXECUTION_CONFIG_DEFAULT.test(ddl))) {
     return { table, ddl: STEP_TEMPLATES_DDL, insertCols: STEP_TEMPLATES_COLS, selectCols: STEP_TEMPLATES_SELECT_COLS, after: [] as string[] };
   }
-  if (table === 'customer_steps' && typeCheckLacks(ddl, 'jenkins')) {
+  if (table === 'customer_steps' && typeCheckLacks(ddl, 'configmap')) {
     return { table, ddl: CUSTOMER_STEPS_DDL, insertCols: CUSTOMER_STEPS_COLS, selectCols: CUSTOMER_STEPS_COLS, after: [] as string[] };
   }
   // Rebuild when the CHECK predates 'jenkins', or when a previous table rebuild

@@ -30,6 +30,7 @@ const STEP_TYPE_OPTIONS: { value: StepType; label: string }[] = [
   { value: 'script', label: 'Script' },
   { value: 'text', label: 'Text/Instructions' },
   { value: 'jenkins', label: 'Jenkins Deploy' },
+  { value: 'configmap', label: 'ConfigMap Env' },
 ];
 
 interface ExistingStep {
@@ -193,7 +194,7 @@ export function AddCustomStepDialog({
               id="content"
               value={content}
               onChange={(e) => setContent(e.target.value)}
-              placeholder={type === 'bash' ? '#!/bin/bash\necho "Hello World"' : type === 'sql' ? 'SELECT * FROM users;' : 'Enter instructions here...'}
+              placeholder={type === 'bash' ? '#!/bin/bash\necho "Hello World"' : type === 'sql' ? 'SELECT * FROM users;' : type === 'configmap' ? 'KEY=VALUE\nANOTHER_KEY=value' : 'Enter instructions here...'}
               className="font-mono min-h-[200px]"
               required
             />
