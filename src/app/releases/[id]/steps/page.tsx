@@ -32,6 +32,7 @@ import {
   verticalListSortingStrategy,
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
+import { ConfigMapContentEditor } from '@/components/steps/configmap-content-editor';
 
 interface Step {
   id: number;
@@ -138,6 +139,8 @@ function StepList({ steps, category, releaseId, onUpdate }: StepListProps) {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [localSteps, setLocalSteps] = useState<Step[]>(steps);
   const [isReordering, setIsReordering] = useState(false);
+  const [addType, setAddType] = useState('bash');
+  const [addContent, setAddContent] = useState('');
 
   useEffect(() => {
     setLocalSteps(steps);
@@ -166,6 +169,8 @@ function StepList({ steps, category, releaseId, onUpdate }: StepListProps) {
       });
       if (response.ok) {
         setIsDialogOpen(false);
+        setAddType('bash');
+        setAddContent('');
         onUpdate();
       }
     } catch (error) {
@@ -244,7 +249,7 @@ function StepList({ steps, category, releaseId, onUpdate }: StepListProps) {
               </div>
               <div>
                 <label className="text-sm font-medium">Type</label>
-                <select name="type" className="w-full p-2 border rounded">
+                <select name="type" className="w-full p-2 border rounded" value={addType} onChange={(e) => setAddType(e.target.value)}>
                   <option value="bash">Bash Script</option>
                   <option value="sql">SQL</option>
                   <option value="rest">REST</option>
@@ -256,7 +261,14 @@ function StepList({ steps, category, releaseId, onUpdate }: StepListProps) {
               </div>
               <div>
                 <label className="text-sm font-medium">Content</label>
-                <textarea name="content" className="w-full p-2 border rounded font-mono" rows={6} required />
+                {addType === 'configmap' ? (
+                  <>
+                    <ConfigMapContentEditor value={addContent} onChange={setAddContent} />
+                    <input type="hidden" name="content" value={addContent} />
+                  </>
+                ) : (
+                  <textarea name="content" className="w-full p-2 border rounded font-mono" rows={6} required />
+                )}
               </div>
               <div>
                 <label className="text-sm font-medium">Description</label>
@@ -308,6 +320,8 @@ interface SortableStepItemProps {
 
 function SortableStepItem({ step, index, onDelete, onUpdate }: SortableStepItemProps) {
   const [isEditOpen, setIsEditOpen] = useState(false);
+  const [editType, setEditType] = useState(step.type);
+  const [editContent, setEditContent] = useState(step.content);
   const {
     attributes,
     listeners,
@@ -389,7 +403,7 @@ function SortableStepItem({ step, index, onDelete, onUpdate }: SortableStepItemP
             </div>
             <div>
               <label className="text-sm font-medium">Type</label>
-              <select name="type" defaultValue={step.type} className="w-full p-2 border rounded">
+              <select name="type" value={editType} onChange={(e) => setEditType(e.target.value as Step['type'])} className="w-full p-2 border rounded">
                 <option value="bash">Bash Script</option>
                 <option value="sql">SQL</option>
                 <option value="rest">REST</option>
@@ -401,7 +415,14 @@ function SortableStepItem({ step, index, onDelete, onUpdate }: SortableStepItemP
             </div>
             <div>
               <label className="text-sm font-medium">Content</label>
-              <textarea name="content" defaultValue={step.content} className="w-full p-2 border rounded font-mono" rows={6} required />
+              {editType === 'configmap' ? (
+                <>
+                  <ConfigMapContentEditor value={editContent} onChange={setEditContent} />
+                  <input type="hidden" name="content" value={editContent} />
+                </>
+              ) : (
+                <textarea name="content" defaultValue={step.content} className="w-full p-2 border rounded font-mono" rows={6} required />
+              )}
             </div>
             <div>
               <label className="text-sm font-medium">Description</label>

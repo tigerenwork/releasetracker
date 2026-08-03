@@ -21,6 +21,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Checkbox } from '@/components/ui/checkbox';
+import { ConfigMapContentEditor } from '@/components/steps/configmap-content-editor';
 import type { StepType } from '@/lib/db/schema';
 
 const STEP_TYPE_OPTIONS: { value: StepType; label: string }[] = [
@@ -190,14 +191,18 @@ export function AddCustomStepDialog({
 
           <div className="space-y-2">
             <Label htmlFor="content">Content</Label>
-            <Textarea
-              id="content"
-              value={content}
-              onChange={(e) => setContent(e.target.value)}
-              placeholder={type === 'bash' ? '#!/bin/bash\necho "Hello World"' : type === 'sql' ? 'SELECT * FROM users;' : type === 'configmap' ? 'KEY=VALUE\nANOTHER_KEY=value' : 'Enter instructions here...'}
-              className="font-mono min-h-[200px]"
-              required
-            />
+            {type === 'configmap' ? (
+              <ConfigMapContentEditor value={content} onChange={setContent} />
+            ) : (
+              <Textarea
+                id="content"
+                value={content}
+                onChange={(e) => setContent(e.target.value)}
+                placeholder={type === 'bash' ? '#!/bin/bash\necho "Hello World"' : type === 'sql' ? 'SELECT * FROM users;' : 'Enter instructions here...'}
+                className="font-mono min-h-[200px]"
+                required
+              />
+            )}
           </div>
 
           <div className="flex items-start space-x-3 p-4 bg-slate-50 rounded-lg">

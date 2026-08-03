@@ -23,6 +23,7 @@ import {
 } from '@/lib/services/agent-bridge';
 import { appFromPodName } from '@/lib/grafana';
 import { recordConfigMapEdit } from '@/lib/actions/config-map-edits';
+import { parseConfigMapContent } from '@/lib/configmap-content';
 
 interface ConfigMapExecutorProps {
   stepId: number;
@@ -31,38 +32,6 @@ interface ConfigMapExecutorProps {
   content: string;
   namespace: string;
   kubeContext?: string;
-}
-
-// ConfigMap data keys — the agent enforces the same allowlist
-const KEY_RE = /^[-._a-zA-Z0-9]+$/;
-
-// Parse KEY=VALUE lines: blank lines and #-comments are ignored, lines are
-// split on the FIRST '=', and invalid keys are returned as skipped warnings
-function parseEnvContent(content: string): {
-  vars: Record<string, string>;
-  skipped: { line: number; text: string; reason: string }[];
-} {
-  const vars: Record<string, string> = {};
-  const skipped: { line: number; text: string; reason: string }[] = [];
-
-  content.split('\n').forEach((raw, i) => {
-    const line = raw.trim();
-    if (!line || line.startsWith('#')) return;
-    const eq = line.indexOf('=');
-    if (eq === -1) {
-      skipped.push({ line: i + 1, text: line, reason: 'no = separator' });
-      return;
-    }
-    const key = line.slice(0, eq).trim();
-    const value = line.slice(eq + 1);
-    if (!KEY_RE.test(key)) {
-      skipped.push({ line: i + 1, text: line, reason: `invalid key "${key}"` });
-      return;
-    }
-    vars[key] = value;
-  });
-
-  return { vars, skipped };
 }
 
 export function ConfigMapExecutor({ stepId, customerId, releaseId, content, namespace, kubeContext }: ConfigMapExecutorProps) {
@@ -74,8 +43,9 @@ export function ConfigMapExecutor({ stepId, customerId, releaseId, content, name
   const version = mounted ? agentBridge?.getStatus().version : undefined;
   const agentSupported = available && supportsConfigEdit(version);
 
-  const { vars, skipped } = useMemo(() => parseEnvContent(content), [content]);
+  const { set: vars, delete: delKeys, invalid } = useMemo(() => parseConfigMapContent(content), [content]);
   const varEntries = Object.entries(vars);
+  const hasChanges = varEntries.length > 0 || delKeys.length > 0;
 
   // pod loading
   const [pods, setPods] = useState<PodInfo[] | null>(null);
@@ -176,13 +146,13 @@ export function ConfigMapExecutor({ stepId, customerId, releaseId, content, name
   };
 
   const handleApply = async () => {
-    if (!agentBridge || !configMapName || varEntries.length === 0) return;
+    if (!agentBridge || !configMapName || !hasChanges) return;
     setApplying(true);
     setApplyError(null);
     setApplied(false);
     setRestartMessage(null);
 
-    const patch = { set: vars, delete: [] };
+    const patch = { set: vars, delete: delKeys };
     try {
       const res = await agentBridge.configApply(bridgeContext(), configMapName, patch);
       if (!res.success) {
@@ -253,7 +223,7 @@ export function ConfigMapExecutor({ stepId, customerId, releaseId, content, name
           <Button
             size="sm"
             onClick={handleApply}
-            disabled={applying || !configMapName || varEntries.length === 0}
+            disabled={applying || !configMapName || !hasChanges}
             className="bg-green-600 hover:bg-green-700"
           >
             {applying && <Loader2 className="h-4 w-4 animate-spin" />}
@@ -267,21 +237,22 @@ export function ConfigMapExecutor({ stepId, customerId, releaseId, content, name
         <div className="space-y-2">
           <p className="text-sm text-slate-500">
             {varEntries.length} variable{varEntries.length === 1 ? '' : 's'} to set
-            {skipped.length > 0 && ` — ${skipped.length} line${skipped.length === 1 ? '' : 's'} skipped`}
+            {delKeys.length > 0 && `, ${delKeys.length} key${delKeys.length === 1 ? '' : 's'} to delete`}
+            {invalid.length > 0 && ` — ${invalid.length} line${invalid.length === 1 ? '' : 's'} skipped`}
           </p>
 
-          {varEntries.length === 0 && (
+          {!hasChanges && (
             <div className="p-3 bg-red-50 text-red-600 rounded-md text-sm">
-              No valid KEY=VALUE lines in the step content. Nothing to apply.
+              No valid KEY=VALUE or -KEY lines in the step content. Nothing to apply.
             </div>
           )}
 
-          {skipped.length > 0 && (
+          {invalid.length > 0 && (
             <div className="p-3 bg-amber-50 text-amber-700 rounded-md text-sm space-y-1">
               <p className="font-medium">Skipped lines:</p>
-              {skipped.map((s) => (
-                <p key={s.line} className="font-mono text-xs">
-                  Line {s.line}: {s.text} ({s.reason})
+              {invalid.map((s, i) => (
+                <p key={i} className="font-mono text-xs">
+                  {s.line} ({s.reason})
                 </p>
               ))}
             </div>
@@ -375,6 +346,18 @@ export function ConfigMapExecutor({ stepId, customerId, releaseId, content, name
           </div>
         )}
 
+        {configMapName && delKeys.length > 0 && (
+          <div className="space-y-2">
+            <p className="text-sm text-amber-700">
+              Will be deleted from <span className="font-mono">{configMapName}</span> — deletion
+              is permanent on apply:
+            </p>
+            <pre className="text-xs bg-amber-50 border border-amber-200 p-3 rounded-md overflow-x-auto max-h-40 font-mono text-amber-800">
+              {delKeys.map((k) => `-${k}`).join('\n')}
+            </pre>
+          </div>
+        )}
+
         {/* Apply result */}
         {applyError && (
           <div className="p-3 bg-red-50 text-red-600 rounded-md text-sm flex items-center gap-2">
@@ -387,8 +370,10 @@ export function ConfigMapExecutor({ stepId, customerId, releaseId, content, name
           <div className="p-3 bg-green-50 rounded-md text-sm space-y-3">
             <div className="flex items-center gap-2 text-green-800">
               <CheckCircle className="h-4 w-4 shrink-0" />
-              Applied {varEntries.length} key{varEntries.length === 1 ? '' : 's'} to{' '}
-              <span className="font-mono">{configMapName}</span>
+              Applied {varEntries.length} key{varEntries.length === 1 ? '' : 's'}
+              {delKeys.length > 0 &&
+                `, deleted ${delKeys.length} key${delKeys.length === 1 ? '' : 's'}`}{' '}
+              on <span className="font-mono">{configMapName}</span>
             </div>
             <div className="flex items-center gap-2">
               <Button
