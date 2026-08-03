@@ -6,7 +6,6 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
-import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
 
 interface CustomerWithCluster {
@@ -146,7 +145,7 @@ export function ActivateReleaseDialog({
           />
         </div>
 
-        <ScrollArea className="flex-1 min-h-0 border rounded-lg p-4 my-2">
+        <div className="flex-1 min-h-0 overflow-y-auto border rounded-lg p-4 my-2">
           <div className="space-y-4">
             {Object.entries(groupedByCluster).length === 0 ? (
               <p className="text-slate-500 text-center py-4">No customers found</p>
@@ -188,7 +187,7 @@ export function ActivateReleaseDialog({
               })
             )}
           </div>
-        </ScrollArea>
+        </div>
 
         <DialogFooter>
           <Button variant="outline" onClick={onClose} disabled={isLoading}>
