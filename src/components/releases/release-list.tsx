@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { useState } from 'react';
-import { Package, Play, Archive, Copy, Edit, Trash2, ChevronDown, ChevronUp, ArrowUpDown } from 'lucide-react';
+import { Package, Play, Archive, RotateCcw, Copy, Edit, Trash2, ChevronDown, ChevronUp, ArrowUpDown } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import {
@@ -125,6 +125,16 @@ export function ReleaseList({ releases, showActions = true }: ReleaseListProps) 
       window.location.reload();
     } catch (error) {
       alert(error instanceof Error ? error.message : 'Failed to archive release');
+    }
+  }
+
+  async function handleReactivate(id: number) {
+    try {
+      const { reactivateRelease } = await import('@/lib/actions/releases');
+      await reactivateRelease(id);
+      window.location.reload();
+    } catch (error) {
+      alert(error instanceof Error ? error.message : 'Failed to reactivate release');
     }
   }
 
@@ -279,6 +289,12 @@ export function ReleaseList({ releases, showActions = true }: ReleaseListProps) 
                         <DropdownMenuItem onClick={() => handleArchive(release.id)}>
                           <Archive className="w-4 h-4 mr-2" />
                           Archive
+                        </DropdownMenuItem>
+                      )}
+                      {release.status === 'archived' && (
+                        <DropdownMenuItem onClick={() => handleReactivate(release.id)}>
+                          <RotateCcw className="w-4 h-4 mr-2" />
+                          Reactivate
                         </DropdownMenuItem>
                       )}
                       {release.status !== 'archived' && (

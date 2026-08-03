@@ -49,12 +49,14 @@ export default async function ReleaseDetailPage({ params }: ReleaseDetailPagePro
     notFound();
   }
 
-  // Get steps grouped by cluster
-  const stepsByCluster = release.status === 'active' 
+  // Get steps grouped by cluster (archived releases keep their data; shown read-only)
+  const hasMatrix = release.status === 'active' || release.status === 'archived';
+
+  const stepsByCluster = hasMatrix
     ? await getReleaseStepsGroupedByCluster(releaseId)
     : {};
 
-  const stats = release.status === 'active' 
+  const stats = hasMatrix
     ? await getStepStats(releaseId)
     : { total: 0, done: 0, skipped: 0, pending: 0, reverted: 0, percentage: 0 };
 
@@ -120,7 +122,7 @@ export default async function ReleaseDetailPage({ params }: ReleaseDetailPagePro
             <div>
               <label className="text-sm font-medium text-slate-500">Total Customers</label>
               <p className="text-slate-900">
-                {release.status === 'active' ? existingCustomerIds.length : allCustomers.length}
+                {hasMatrix ? existingCustomerIds.length : allCustomers.length}
                 {release.status === 'active' && allCustomers.length > existingCustomerIds.length && (
                   <span className="text-slate-400 text-sm ml-1">
                     ({allCustomers.length - existingCustomerIds.length} not in release)
@@ -128,7 +130,7 @@ export default async function ReleaseDetailPage({ params }: ReleaseDetailPagePro
                 )}
               </p>
             </div>
-            {release.status === 'active' && (
+            {hasMatrix && (
               <div>
                 <label className="text-sm font-medium text-slate-500">Progress</label>
                 <div className="flex items-center gap-2">
@@ -189,8 +191,8 @@ export default async function ReleaseDetailPage({ params }: ReleaseDetailPagePro
         </Card>
       )}
 
-      {/* Matrix View (for active) */}
-      {release.status === 'active' && (
+      {/* Matrix View (active releases; archived shown read-only) */}
+      {hasMatrix && (
         <div className="space-y-8">
           {/* Customer Pods: floating trigger + slide-in sheet so users don't
               have to scroll away from the matrix to check pod status */}
@@ -220,6 +222,7 @@ export default async function ReleaseDetailPage({ params }: ReleaseDetailPagePro
               stepsByCluster={stepsByCluster} 
               category="deploy"
               releaseId={releaseId}
+              readOnly={release.status === 'archived'}
             />
           </div>
 
@@ -229,6 +232,7 @@ export default async function ReleaseDetailPage({ params }: ReleaseDetailPagePro
               stepsByCluster={stepsByCluster} 
               category="verify"
               releaseId={releaseId}
+              readOnly={release.status === 'archived'}
             />
           </div>
         </div>

@@ -61,6 +61,9 @@ interface StepDetailPanelProps {
   template: any;
   isOpen: boolean;
   onClose: () => void;
+  // Hide all mutation controls (mark done/skip/revert/override/delete) — used
+  // when viewing an archived release's status and results
+  readOnly?: boolean;
   onMarkDone: (id: number, notes?: string) => Promise<void>;
   onSkip: (id: number, reason: string) => Promise<void>;
   onRevert: (id: number, reason?: string) => Promise<void>;
@@ -98,6 +101,7 @@ export function StepDetailPanel({
   template,
   isOpen,
   onClose,
+  readOnly = false,
   onMarkDone,
   onSkip,
   onRevert,
@@ -173,7 +177,7 @@ export function StepDetailPanel({
             <FileText className="w-3 h-3 mr-1" />
             Custom Step
           </Badge>
-          {onEditCustom && onDeleteCustom && (
+          {onEditCustom && onDeleteCustom && !readOnly && (
             <div className="flex gap-1">
               <Button variant="ghost" size="sm" onClick={() => setIsEditing(true)}>
                 <Pencil className="w-3 h-3 mr-1" />
@@ -199,10 +203,12 @@ export function StepDetailPanel({
           <Button variant="ghost" size="sm" onClick={() => setShowOriginal(!showOriginal)}>
             {showOriginal ? 'Hide Original' : 'View Original'}
           </Button>
-          <Button variant="ghost" size="sm" onClick={handleResetToTemplate}>
-            <RotateCcw className="w-3 h-3 mr-1" />
-            Reset to Template
-          </Button>
+          {!readOnly && (
+            <Button variant="ghost" size="sm" onClick={handleResetToTemplate}>
+              <RotateCcw className="w-3 h-3 mr-1" />
+              Reset to Template
+            </Button>
+          )}
         </div>
       );
     }
@@ -213,10 +219,12 @@ export function StepDetailPanel({
           <FileText className="w-3 h-3 mr-1" />
           From Template
         </Badge>
-        <Button variant="ghost" size="sm" onClick={() => setIsEditing(true)}>
-          <Pencil className="w-3 h-3 mr-1" />
-          Override Content
-        </Button>
+        {!readOnly && (
+          <Button variant="ghost" size="sm" onClick={() => setIsEditing(true)}>
+            <Pencil className="w-3 h-3 mr-1" />
+            Override Content
+          </Button>
+        )}
       </div>
     );
   };
@@ -354,7 +362,7 @@ export function StepDetailPanel({
             {step.type === 'sql' && <Separator />}
 
             {/* Execution Section */}
-            {step.status !== 'done' && step.status !== 'skipped' && (
+            {!readOnly && step.status !== 'done' && step.status !== 'skipped' && (
               <div className="space-y-3">
                 <label className="text-sm font-medium text-slate-500 block">Execution Notes</label>
                 <Textarea
@@ -413,10 +421,12 @@ export function StepDetailPanel({
                     <p className="text-slate-700 mt-1">{step.notes}</p>
                   </div>
                 )}
-                <Button variant="outline" onClick={handleRevert}>
-                  <RotateCcw className="w-4 h-4 mr-1" />
-                  Revert to Pending
-                </Button>
+                {!readOnly && (
+                  <Button variant="outline" onClick={handleRevert}>
+                    <RotateCcw className="w-4 h-4 mr-1" />
+                    Revert to Pending
+                  </Button>
+                )}
               </div>
             )}
 

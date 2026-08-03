@@ -173,6 +173,23 @@ export async function archiveRelease(id: number) {
   revalidatePath(`/releases/${id}`);
 }
 
+// Reactivate is a plain status flip back to 'active' — per-customer steps and
+// execution results are preserved by archiving, so nothing needs re-copying.
+export async function reactivateRelease(id: number) {
+  const release = await db.query.releases.findFirst({
+    where: eq(releases.id, id),
+  });
+  if (!release) throw new Error('Release not found');
+  if (release.status !== 'archived') {
+    throw new Error('Only archived releases can be reactivated');
+  }
+  await db.update(releases)
+    .set({ status: 'active', updatedAt: new Date() })
+    .where(eq(releases.id, id));
+  revalidatePath('/releases');
+  revalidatePath(`/releases/${id}`);
+}
+
 export async function deleteRelease(id: number) {
   await db.delete(releases).where(eq(releases.id, id));
   revalidatePath('/releases');

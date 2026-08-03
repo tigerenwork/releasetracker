@@ -13,6 +13,8 @@ interface ReleaseMatrixClientProps {
   stepsByCluster: any;
   category: 'deploy' | 'verify';
   releaseId: number;
+  // Archived releases render the matrix for viewing status/results only
+  readOnly?: boolean;
 }
 
 function getDeployStatus(customerSteps: any[]): { done: number; total: number } {
@@ -28,7 +30,7 @@ const statusIcons = {
   reverted: <RotateCcw className="w-5 h-5 text-red-500" />,
 };
 
-export function ReleaseMatrixClient({ stepsByCluster, category, releaseId }: ReleaseMatrixClientProps) {
+export function ReleaseMatrixClient({ stepsByCluster, category, releaseId, readOnly = false }: ReleaseMatrixClientProps) {
   const router = useRouter();
   const [selectedStep, setSelectedStep] = useState<any>(null);
   const [selectedTemplate, setSelectedTemplate] = useState<any>(null);
@@ -221,18 +223,20 @@ export function ReleaseMatrixClient({ stepsByCluster, category, releaseId }: Rel
                               ) : null;
                             })()}
                             <div className="mt-2">
-                              <AddCustomStepDialog
-                                releaseId={releaseId}
-                                customerId={customer.customer.id}
-                                customerName={customer.customer.name}
-                                category={category}
-                                existingSteps={steps.map((s: any) => ({ id: s.id, name: s.name, orderIndex: s.orderIndex }))}
-                                onAdd={async (data) => {
-                                  const { addCustomStep } = await import('@/lib/actions/customer-steps');
-                                  await addCustomStep(releaseId, customer.customer.id, data);
-                                  router.refresh();
-                                }}
-                              />
+                              {!readOnly && (
+                                <AddCustomStepDialog
+                                  releaseId={releaseId}
+                                  customerId={customer.customer.id}
+                                  customerName={customer.customer.name}
+                                  category={category}
+                                  existingSteps={steps.map((s: any) => ({ id: s.id, name: s.name, orderIndex: s.orderIndex }))}
+                                  onAdd={async (data) => {
+                                    const { addCustomStep } = await import('@/lib/actions/customer-steps');
+                                    await addCustomStep(releaseId, customer.customer.id, data);
+                                    router.refresh();
+                                  }}
+                                />
+                              )}
                             </div>
                           </th>
                         ))}
@@ -311,6 +315,7 @@ export function ReleaseMatrixClient({ stepsByCluster, category, releaseId }: Rel
         template={selectedTemplate}
         isOpen={isPanelOpen}
         onClose={() => setIsPanelOpen(false)}
+        readOnly={readOnly}
         onMarkDone={markStepDone}
         onSkip={skipStep}
         onRevert={markStepReverted}

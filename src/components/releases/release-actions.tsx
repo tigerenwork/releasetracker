@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { Play, Archive } from 'lucide-react';
+import { Play, Archive, RotateCcw } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { ActivateReleaseDialog } from './activate-release-dialog';
 import { AddCustomerDialog } from './add-customer-dialog';
@@ -38,6 +38,7 @@ export function ReleaseActions({
   const [isActivateDialogOpen, setIsActivateDialogOpen] = useState(false);
   const [isAddCustomerDialogOpen, setIsAddCustomerDialogOpen] = useState(false);
   const [isArchiving, setIsArchiving] = useState(false);
+  const [isReactivating, setIsReactivating] = useState(false);
 
   const handleActivate = async (customerIds: number[]) => {
     await activateRelease(releaseId, customerIds);
@@ -56,6 +57,21 @@ export function ReleaseActions({
       console.error('Failed to archive release:', error);
     } finally {
       setIsArchiving(false);
+    }
+  };
+
+  const handleReactivate = async () => {
+    if (!confirm('Reactivate this release? Its steps and deploy status will become editable again.')) return;
+
+    setIsReactivating(true);
+    try {
+      const { reactivateRelease } = await import('@/lib/actions/releases');
+      await reactivateRelease(releaseId);
+      router.refresh();
+    } catch (error) {
+      console.error('Failed to reactivate release:', error);
+    } finally {
+      setIsReactivating(false);
     }
   };
 
@@ -121,6 +137,20 @@ export function ReleaseActions({
           onAdd={handleAddCustomers}
         />
       </>
+    );
+  }
+
+  if (releaseStatus === 'archived') {
+    return (
+      <Button
+        variant="outline"
+        size="sm"
+        onClick={handleReactivate}
+        disabled={isReactivating}
+      >
+        <RotateCcw className="w-4 h-4 mr-2" />
+        {isReactivating ? 'Reactivating...' : 'Reactivate'}
+      </Button>
     );
   }
 
