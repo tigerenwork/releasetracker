@@ -160,6 +160,7 @@ export const customerExecutionConfigs = sqliteTable('customer_execution_configs'
     job?: string;
     serviceParam?: string;
     branchParam?: string;
+    servicePodMap?: Record<string, string>;
   }>(),
   
   isActive: integer('is_active', { mode: 'boolean' }).default(true),

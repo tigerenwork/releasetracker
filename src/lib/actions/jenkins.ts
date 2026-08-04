@@ -23,6 +23,8 @@ type JenkinsMapping = {
   job?: string;
   serviceParam?: string;
   branchParam?: string;
+  /** Jenkins service name -> k8s app name (pod name prefix), for pod status after deploy */
+  servicePodMap?: Record<string, string>;
 };
 
 // ==================== Settings ====================
@@ -70,12 +72,22 @@ export async function getCustomerJenkinsConfig(customerId: number): Promise<Jenk
   return row?.jenkinsConfig || null;
 }
 
+// Trim keys/values, drop empty entries; undefined when nothing is left
+function cleanServicePodMap(map: Record<string, string> | undefined): Record<string, string> | undefined {
+  if (!map) return undefined;
+  const entries = Object.entries(map)
+    .map(([service, app]) => [service.trim(), app.trim()] as const)
+    .filter(([service, app]) => service && app);
+  return entries.length > 0 ? Object.fromEntries(entries) : undefined;
+}
+
 export async function updateCustomerJenkinsConfig(customerId: number, config: JenkinsMapping) {
   const cleaned: JenkinsMapping = {
     view: config.view?.trim() || undefined,
     job: config.job?.trim() || undefined,
     serviceParam: config.serviceParam?.trim() || undefined,
     branchParam: config.branchParam?.trim() || undefined,
+    servicePodMap: cleanServicePodMap(config.servicePodMap),
   };
 
   const existing = await db.query.customerExecutionConfigs.findFirst({

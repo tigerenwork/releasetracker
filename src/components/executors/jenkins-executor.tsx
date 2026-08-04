@@ -22,16 +22,19 @@ import {
   getLastDeploy,
   type DeployStatus,
 } from '@/lib/actions/jenkins';
+import { JenkinsPodsPanel } from '@/components/executors/jenkins-pods-panel';
 
 interface JenkinsExecutorProps {
   customerStepId: number;
   customerId: number;
+  namespace: string;
+  kubeContext?: string;
 }
 
 const POLL_INTERVAL_MS = 4000;
 const POLL_TIMEOUT_MS = 5 * 60 * 1000;
 
-export function JenkinsExecutor({ customerStepId, customerId }: JenkinsExecutorProps) {
+export function JenkinsExecutor({ customerStepId, customerId, namespace, kubeContext }: JenkinsExecutorProps) {
   const [services, setServices] = useState<string[] | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [service, setService] = useState<string>('');
@@ -266,6 +269,16 @@ export function JenkinsExecutor({ customerStepId, customerId }: JenkinsExecutorP
               )}
             </div>
           </div>
+        )}
+
+        {service && namespace && (
+          <JenkinsPodsPanel
+            customerId={customerId}
+            namespace={namespace}
+            kubeContext={kubeContext}
+            service={service}
+            active={isRunning}
+          />
         )}
       </CardContent>
     </Card>

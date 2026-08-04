@@ -329,7 +329,12 @@ export function StepDetailPanel({
 
             {/* Jenkins executor */}
             {step.type === 'jenkins' && (
-              <JenkinsExecutor customerStepId={step.id} customerId={step.customerId} />
+              <JenkinsExecutor
+                customerStepId={step.id}
+                customerId={step.customerId}
+                namespace={step.customer?.namespace || ''}
+                kubeContext={step.customer?.cluster?.name}
+              />
             )}
 
             {step.type === 'jenkins' && <Separator />}

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -15,7 +15,8 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { createCustomer, updateCustomer } from '@/lib/actions/customers';
-import { updateCustomerJenkinsConfig } from '@/lib/actions/jenkins';
+import { updateCustomerJenkinsConfig, listServices } from '@/lib/actions/jenkins';
+import { Plus, Trash2 } from 'lucide-react';
 import type { Customer, Cluster } from '@/lib/db/schema';
 
 type JenkinsMapping = {
@@ -23,6 +24,7 @@ type JenkinsMapping = {
   job?: string;
   serviceParam?: string;
   branchParam?: string;
+  servicePodMap?: Record<string, string>;
 };
 
 interface CustomerFormProps {
@@ -36,6 +38,19 @@ export function CustomerForm({ customer, clusters, jenkinsConfig, isEdit = false
   const router = useRouter();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Service -> pod app mapping rows, initialized from the saved config
+  const [podMapRows, setPodMapRows] = useState<Array<{ service: string; app: string }>>(() =>
+    Object.entries(jenkinsConfig?.servicePodMap || {}).map(([service, app]) => ({ service, app }))
+  );
+  const [services, setServices] = useState<string[]>([]);
+
+  // Load the deployable services so the mapping rows can offer a dropdown
+  useEffect(() => {
+    if (!isEdit || !customer) return;
+    listServices(customer.id)
+      .then(setServices)
+      .catch(() => setServices([]));
+  }, [isEdit, customer]);
 
   async function handleSubmit(formData: FormData) {
     setIsSubmitting(true);
@@ -57,6 +72,11 @@ export function CustomerForm({ customer, clusters, jenkinsConfig, isEdit = false
           job: formData.get('jenkinsJob') as string,
           serviceParam: formData.get('jenkinsServiceParam') as string,
           branchParam: formData.get('jenkinsBranchParam') as string,
+          servicePodMap: Object.fromEntries(
+            podMapRows
+              .filter((r) => r.service.trim() && r.app.trim())
+              .map((r) => [r.service.trim(), r.app.trim()])
+          ),
         });
       } else {
         await createCustomer(data);
@@ -203,6 +223,64 @@ export function CustomerForm({ customer, clusters, jenkinsConfig, isEdit = false
                     defaultValue={jenkinsConfig?.branchParam || ''}
                     placeholder="auto-detected (matches /branch/i)"
                   />
+                </div>
+
+                <div className="space-y-2 col-span-2">
+                  <Label>Service → Pod App Mapping</Label>
+                  <p className="text-sm text-slate-500">
+                    Maps each deployable service to its pod app name, used to show pod status after a deploy.
+                    Leave empty to auto-match from the service name.
+                  </p>
+                  {podMapRows.map((row, i) => (
+                    <div key={i} className="flex items-center gap-2">
+                      {services.length > 0 ? (
+                        <Select
+                          value={row.service}
+                          onValueChange={(v) => setPodMapRows((rows) => rows.map((r, j) => j === i ? { ...r, service: v } : r))}
+                        >
+                          <SelectTrigger className="flex-1">
+                            <SelectValue placeholder="Select a service" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {services.map((s) => (
+                              <SelectItem key={s} value={s}>{s}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      ) : (
+                        <Input
+                          className="flex-1"
+                          value={row.service}
+                          onChange={(e) => setPodMapRows((rows) => rows.map((r, j) => j === i ? { ...r, service: e.target.value } : r))}
+                          placeholder="Service, e.g. aldebaran-chaitin-deploy"
+                        />
+                      )}
+                      <span className="text-slate-400">→</span>
+                      <Input
+                        className="flex-1"
+                        value={row.app}
+                        onChange={(e) => setPodMapRows((rows) => rows.map((r, j) => j === i ? { ...r, app: e.target.value } : r))}
+                        placeholder="Pod app, e.g. aldebaran"
+                      />
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => setPodMapRows((rows) => rows.filter((_, j) => j !== i))}
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  ))}
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setPodMapRows((rows) => [...rows, { service: '', app: '' }])}
+                  >
+                    <Plus className="h-4 w-4 mr-1" />
+                    Add mapping
+                  </Button>
                 </div>
               </div>
             </div>
