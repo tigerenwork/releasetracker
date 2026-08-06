@@ -206,10 +206,23 @@ export function StepDetailPanel({
             {showOriginal ? 'Hide Original' : 'View Original'}
           </Button>
           {!readOnly && (
-            <Button variant="ghost" size="sm" onClick={handleResetToTemplate}>
-              <RotateCcw className="w-3 h-3 mr-1" />
-              Reset to Template
-            </Button>
+            <>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => {
+                  setEditContent(step.content);
+                  setIsEditing(true);
+                }}
+              >
+                <Pencil className="w-3 h-3 mr-1" />
+                Edit Content
+              </Button>
+              <Button variant="ghost" size="sm" onClick={handleResetToTemplate}>
+                <RotateCcw className="w-3 h-3 mr-1" />
+                Reset to Template
+              </Button>
+            </>
           )}
         </div>
       );

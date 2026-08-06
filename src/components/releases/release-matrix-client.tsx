@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Plus, CheckCircle, Circle, SkipForward, RotateCcw, FileText, AlertCircle, Edit } from 'lucide-react';
+import { Plus, CheckCircle, Circle, SkipForward, RotateCcw, FileText, Edit } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -257,12 +257,6 @@ export function ReleaseMatrixClient({ stepsByCluster, category, releaseId, readO
                                       custom
                                     </Badge>
                                   )}
-                                  {step.isOverridden && (
-                                    <Badge variant="outline" className="text-xs bg-amber-50 text-amber-700 border-amber-200">
-                                      <AlertCircle className="w-3 h-3 mr-1" />
-                                      overridden
-                                    </Badge>
-                                  )}
                                 </div>
                               </div>
                             </div>
@@ -281,18 +275,22 @@ export function ReleaseMatrixClient({ stepsByCluster, category, releaseId, readO
                             if (!customerStep) return <td key={customer.customer.id} className="py-2 px-3"></td>;
 
                             const hasNotes = !!customerStep.notes;
+                            const isStepOverridden = !!customerStep.isOverridden;
 
                             return (
                               <td key={customer.customer.id} className="p-0 text-center">
                                 <button
                                   onClick={() => handleStepClick(customerStep, step.template)}
                                   className="w-full h-full min-h-[48px] px-3 py-2 flex items-center justify-center cursor-pointer hover:bg-slate-100 rounded transition-colors"
-                                  title={hasNotes ? customerStep.notes : undefined}
+                                  title={hasNotes ? customerStep.notes : (isStepOverridden ? 'Content overridden from template' : undefined)}
                                 >
                                   <span className="relative inline-flex hover:scale-110 transition-transform">
                                     {statusIcons[customerStep.status as keyof typeof statusIcons]}
                                     {hasNotes && (
                                       <span className="absolute -top-1 -right-1 w-2 h-2 bg-orange-400 rounded-full" />
+                                    )}
+                                    {isStepOverridden && (
+                                      <span className="absolute -bottom-1 -right-1 w-2 h-2 bg-amber-500 rounded-full" />
                                     )}
                                   </span>
                                 </button>
