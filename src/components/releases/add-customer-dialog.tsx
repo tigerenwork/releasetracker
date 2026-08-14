@@ -125,7 +125,7 @@ export function AddCustomerDialog({
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="max-w-2xl max-h-[80vh] flex flex-col">
+      <DialogContent className="max-w-2xl max-h-[80vh] flex flex-col overflow-hidden">
         <DialogHeader>
           <DialogTitle>Add Customers to Release: {releaseName}</DialogTitle>
         </DialogHeader>
@@ -147,7 +147,7 @@ export function AddCustomerDialog({
           />
         </div>
 
-        <ScrollArea className="flex-1 border rounded-lg p-4 my-2">
+        <ScrollArea className="flex-1 min-h-0 border rounded-lg p-4 my-2">
           <div className="space-y-4">
             {Object.entries(groupedByCluster).length === 0 ? (
               <p className="text-slate-500 text-center py-4">No customers found</p>
