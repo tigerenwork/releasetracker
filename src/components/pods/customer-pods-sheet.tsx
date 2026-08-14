@@ -15,7 +15,7 @@ interface CustomerPodsSheetProps {
   clusters: {
     key: string | number;
     clusterName: string;
-    customers: { id: number; name: string; namespace: string }[];
+    customers: { id: number; name: string; namespace: string; websiteUrl?: string | null }[];
   }[];
   releaseId: number;
 }

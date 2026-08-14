@@ -201,11 +201,12 @@ export default async function ReleaseDetailPage({ params }: ReleaseDetailPagePro
             clusters={Object.values(stepsByCluster).map((clusterData: any) => ({
               key: clusterData.cluster?.id || 'unknown',
               clusterName: clusterData.cluster?.name || 'Unknown Cluster',
-              customers: Object.values(clusterData.customers as Record<string, { customer: { id: number; name: string; namespace: string } }>).map(
+              customers: Object.values(clusterData.customers as Record<string, { customer: { id: number; name: string; namespace: string; websiteUrl?: string | null } }>).map(
                 (c) => ({
                   id: c.customer.id,
                   name: c.customer.name,
                   namespace: c.customer.namespace,
+                  websiteUrl: c.customer.websiteUrl,
                 })
               ),
             }))}
