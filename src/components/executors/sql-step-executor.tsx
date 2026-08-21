@@ -16,6 +16,10 @@ import {
 import { Loader2, Play, CheckCircle, XCircle, Search } from 'lucide-react';
 import { agentBridge, type ExecutionResult, type PodInfo } from '@/lib/services/agent-bridge';
 import { getCustomerSqlConfig } from '@/lib/actions/customers';
+import {
+  getLastScriptExecution,
+  saveScriptExecution,
+} from '@/lib/actions/step-executions';
 
 interface SqlExecutorProps {
   stepId: number;
@@ -87,6 +91,33 @@ fi
 `;
 }
 
+function toDisplayResult(last: {
+  success: boolean;
+  exitCode?: number | null;
+  duration: number;
+  stdout: string;
+  stderr: string;
+  errorMessage?: string;
+}): ExecutionResult {
+  return {
+    success: last.success,
+    executionId: '',
+    type: 'script',
+    exitCode: last.exitCode ?? undefined,
+    duration: last.duration,
+    timestamp: '',
+    script: {
+      stdout: last.stdout,
+      stderr: last.stderr,
+      exitCode: last.exitCode ?? (last.success ? 0 : 1),
+      command: '',
+    },
+    error: last.success
+      ? undefined
+      : { code: 'FAILED', message: last.errorMessage || 'Failed' },
+  };
+}
+
 export function SqlExecutor({ stepId, customerId, releaseId, content, namespace, kubeContext }: SqlExecutorProps) {
   // agentBridge only exists in the browser; defer the check until after mount
   const [mounted, setMounted] = useState(false);
@@ -104,17 +135,53 @@ export function SqlExecutor({ stepId, customerId, releaseId, content, namespace,
   const [isExecuting, setIsExecuting] = useState(false);
   const [result, setResult] = useState<ExecutionResult | null>(null);
   const [execError, setExecError] = useState<string | null>(null);
+  const [completedAt, setCompletedAt] = useState<string | null>(null);
+  const [restoredTarget, setRestoredTarget] = useState<{
+    podName?: string;
+    containerName?: string;
+  } | null>(null);
+  const [configLoaded, setConfigLoaded] = useState(false);
+  const [restoreReady, setRestoreReady] = useState(false);
 
   // Per-customer defaults (env var name, client) if configured
   useEffect(() => {
     getCustomerSqlConfig(customerId)
       .then((cfg) => {
-        if (!cfg) return;
-        if (cfg.connectionEnvVar) setEnvVar(cfg.connectionEnvVar);
-        if (cfg.sqlClient === 'mysql' || cfg.sqlClient === 'psql') setClient(cfg.sqlClient);
+        if (cfg) {
+          if (cfg.connectionEnvVar) setEnvVar(cfg.connectionEnvVar);
+          if (cfg.sqlClient === 'mysql' || cfg.sqlClient === 'psql') setClient(cfg.sqlClient);
+        }
       })
-      .catch(() => {});
+      .catch(() => {})
+      .finally(() => setConfigLoaded(true));
   }, [customerId]);
+
+  // Restore last execution (output + SQL options) after customer defaults load,
+  // so a prior run's env/client/schema win over the customer default
+  useEffect(() => {
+    if (!configLoaded) return;
+    getLastScriptExecution(stepId, 'sql')
+      .then((last) => {
+        if (!last) return;
+        setResult(toDisplayResult(last));
+        setCompletedAt(last.completedAt);
+        const req = last.request as {
+          podName?: string;
+          containerName?: string;
+          envVar?: string;
+          client?: SqlClient;
+          schema?: string;
+        };
+        setRestoredTarget({ podName: req.podName, containerName: req.containerName });
+        if (req.envVar) setEnvVar(req.envVar);
+        if (req.client === 'auto' || req.client === 'mysql' || req.client === 'psql') {
+          setClient(req.client);
+        }
+        if (typeof req.schema === 'string') setSchema(req.schema);
+      })
+      .catch(() => {})
+      .finally(() => setRestoreReady(true));
+  }, [stepId, configLoaded]);
 
   // Load the namespace's pods once the extension is available
   useEffect(() => {
@@ -124,13 +191,33 @@ export function SqlExecutor({ stepId, customerId, releaseId, content, namespace,
       .then((res) => {
         if (res.success && res.pods) {
           setPods(res.pods.items);
-          if (res.pods.items.length === 1) setPodName(res.pods.items[0].name);
         } else {
           setLoadError(res.error?.message || 'Failed to load pods');
         }
       })
       .catch((err) => setLoadError(err instanceof Error ? err.message : 'Failed to load pods'));
   }, [available, customerId, namespace, kubeContext, stepId, releaseId]);
+
+  // Prefer last-run pod/container when still present; otherwise pick the only pod
+  useEffect(() => {
+    if (!restoreReady || !pods?.length || podName) return;
+    const restoredPod = restoredTarget?.podName;
+    if (restoredPod && pods.some((p) => p.name === restoredPod)) {
+      setPodName(restoredPod);
+      const pod = pods.find((p) => p.name === restoredPod);
+      const restoredContainer = restoredTarget?.containerName;
+      if (restoredContainer && pod?.containers.some((c) => c.name === restoredContainer)) {
+        setContainerName(restoredContainer);
+      } else if (pod?.containers.length === 1) {
+        setContainerName(pod.containers[0].name);
+      }
+    } else if (pods.length === 1) {
+      setPodName(pods[0].name);
+      if (pods[0].containers.length === 1) {
+        setContainerName(pods[0].containers[0].name);
+      }
+    }
+  }, [pods, restoredTarget, podName, restoreReady]);
 
   const selectedPod = pods?.find((p) => p.name === podName) || null;
   const containers = selectedPod?.containers || [];
@@ -184,10 +271,38 @@ export function SqlExecutor({ stepId, customerId, releaseId, content, namespace,
     setIsExecuting(true);
     setResult(null);
     setExecError(null);
+    setCompletedAt(null);
 
     try {
       const executionResult = await runScript(buildSqlScript(envVar, client, schema.trim(), content));
       setResult(executionResult);
+      setCompletedAt(new Date().toISOString());
+
+      try {
+        await saveScriptExecution({
+          stepId,
+          customerId,
+          releaseId,
+          type: 'sql',
+          request: {
+            podName,
+            containerName: containerName || undefined,
+            kubeContext,
+            namespace,
+            envVar,
+            client,
+            schema: schema.trim(),
+          },
+          success: executionResult.success,
+          exitCode: executionResult.exitCode ?? executionResult.script?.exitCode,
+          duration: executionResult.duration,
+          stdout: executionResult.script?.stdout,
+          stderr: executionResult.script?.stderr,
+          errorMessage: executionResult.error?.message,
+        });
+      } catch (persistErr) {
+        console.error('Failed to save SQL execution:', persistErr);
+      }
     } catch (err) {
       setExecError(err instanceof Error ? err.message : 'Execution failed');
     } finally {
@@ -197,59 +312,55 @@ export function SqlExecutor({ stepId, customerId, releaseId, content, namespace,
 
   if (!mounted) return null;
 
-  if (!available) {
-    return (
-      <Card>
-        <CardContent className="pt-6">
-          <p className="text-sm text-amber-700 bg-amber-50 rounded-md p-3">
-            Agent extension not detected. Install the browser extension and start the local
-            agent to execute this step in the cluster.
-          </p>
-        </CardContent>
-      </Card>
-    );
-  }
-
   return (
     <Card>
       <CardHeader className="pb-3">
         <CardTitle className="flex items-center justify-between text-base">
           <Badge variant="outline" className="bg-blue-50">SQL Execute</Badge>
-          <Button
-            size="sm"
-            onClick={handleExecute}
-            disabled={isExecuting || isDetecting || !podName || (containers.length > 1 && !containerName)}
-            className="bg-green-600 hover:bg-green-700"
-          >
-            {isExecuting ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
-            ) : (
-              <Play className="h-4 w-4" />
-            )}
-            <span className="ml-2">Execute</span>
-          </Button>
+          {available && (
+            <Button
+              size="sm"
+              onClick={handleExecute}
+              disabled={isExecuting || isDetecting || !podName || (containers.length > 1 && !containerName)}
+              className="bg-green-600 hover:bg-green-700"
+            >
+              {isExecuting ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Play className="h-4 w-4" />
+              )}
+              <span className="ml-2">Execute</span>
+            </Button>
+          )}
         </CardTitle>
       </CardHeader>
 
       <CardContent className="space-y-4">
-        {loadError && (
+        {!available && (
+          <p className="text-sm text-amber-700 bg-amber-50 rounded-md p-3">
+            Agent extension not detected. Install the browser extension and start the local
+            agent to execute this step in the cluster.
+          </p>
+        )}
+
+        {available && loadError && (
           <div className="p-3 bg-red-50 text-red-600 rounded-md text-sm">
             {loadError}
           </div>
         )}
 
-        {!loadError && pods === null && (
+        {available && !loadError && pods === null && (
           <div className="flex items-center gap-2 text-sm text-slate-500">
             <Loader2 className="h-4 w-4 animate-spin" />
             Loading pods in {namespace}...
           </div>
         )}
 
-        {pods && pods.length === 0 && (
+        {available && pods && pods.length === 0 && (
           <p className="text-sm text-slate-500">No pods found in namespace {namespace}.</p>
         )}
 
-        {pods && pods.length > 0 && (
+        {available && pods && pods.length > 0 && (
           <>
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
@@ -359,7 +470,10 @@ export function SqlExecutor({ stepId, customerId, releaseId, content, namespace,
                 {result.success ? 'Success' : (result.error?.message || 'Failed')}
                 {result.exitCode !== undefined && ` (Exit Code: ${result.exitCode})`}
               </span>
-              <span className="text-slate-500 text-sm ml-auto">{result.duration}ms</span>
+              <span className="text-slate-500 text-sm ml-auto">
+                {completedAt ? `${new Date(completedAt).toLocaleString()} · ` : ''}
+                {result.duration}ms
+              </span>
             </div>
 
             {result.script?.stdout && (
