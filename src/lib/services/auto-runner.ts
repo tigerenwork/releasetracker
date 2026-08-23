@@ -17,7 +17,7 @@
  * Client-only: uses `agentBridge`, which exists only in the browser.
  */
 
-import { agentBridge, type ExecutionContext, type ExecutionResult } from './agent-bridge';
+import { agentBridge, type ExecutionContext, type ExecutionResult, type PodInfo } from './agent-bridge';
 import { buildSqlScript, type SqlClient } from '@/lib/sql-script';
 import { parseConfigMapContent } from '@/lib/configmap-content';
 import { appFromPodName } from '@/lib/grafana';
@@ -83,6 +83,13 @@ const NEEDS_POD: StepType[] = ['bash', 'sql', 'script', 'rest', 'configmap'];
 
 const JENKINS_POLL_INTERVAL_MS = 4000;
 const JENKINS_MAX_WAIT_MS = 30 * 60 * 1000;
+const ROLLOUT_POLL_INTERVAL_MS = 5000;
+const ROLLOUT_MAX_WAIT_MS = 10 * 60 * 1000;
+
+function isPodReady(p: PodInfo): boolean {
+  const [ready, total] = p.ready.split('/').map(Number);
+  return p.status === 'Running' && total > 0 && ready === total;
+}
 
 /** Steps that still need to be executed by the runner. */
 function isRunnable(step: RunPlanStep): boolean {
@@ -194,11 +201,7 @@ async function resolvePodName(
       error: `No pods found for deployment "${target.deployment}" in namespace ${plan.customer.namespace}`,
     };
   }
-  const isReady = (p: (typeof matches)[number]) => {
-    const [ready, total] = p.ready.split('/').map(Number);
-    return p.status === 'Running' && total > 0 && ready === total;
-  };
-  return { podName: (matches.find(isReady) ?? matches[0]).name };
+  return { podName: (matches.find(isPodReady) ?? matches[0]).name };
 }
 
 function buildContext(plan: RunPlan, step: RunPlanStep, target: ResolvedTarget): ExecutionContext {
@@ -289,12 +292,60 @@ async function runRest(
     : { ok: false, error: result.error?.message ?? `HTTP ${result.rest?.statusCode ?? 'error'}` };
 }
 
+/**
+ * A successful Jenkins build only means the deploy was triggered — k8s still
+ * needs to create the new pods, shift traffic and terminate the old ones
+ * before later steps (e.g. an update script) may touch the deployment.
+ *
+ * Waits until every pod of the deployed app was created after the deploy
+ * started and is Running+ready. The app name comes from the customer's
+ * jenkinsConfig.servicePodMap (Jenkins job -> k8s app); without a mapping
+ * there is nothing to verify against and the wait is skipped.
+ */
+async function waitForRollout(
+  plan: RunPlan,
+  step: RunPlanStep,
+  target: ResolvedTarget,
+  control: RunControl,
+  deployStartedAt: number
+): Promise<{ ok: boolean; error?: string }> {
+  const appName = plan.executionConfig?.jenkinsConfig?.servicePodMap?.[target.jenkinsService!];
+  if (!appName || !agentBridge) return { ok: true };
+
+  const ctx = buildContext(plan, step, { ...target, podSelector: '' });
+  const deadline = Date.now() + ROLLOUT_MAX_WAIT_MS;
+
+  while (Date.now() < deadline) {
+    if (control.cancelled) return { ok: false, error: 'Cancelled' };
+    await sleep(ROLLOUT_POLL_INTERVAL_MS);
+
+    const result = await agentBridge.getPods(ctx);
+    if (!result.success) continue; // transient kubectl error — keep polling
+
+    const pods = (result.pods?.items ?? []).filter((p) => appFromPodName(p.name) === appName);
+    // Small skew allowance: pod creationTimestamp is cluster-clock based
+    const isNew = (p: PodInfo) => new Date(p.createdAt).getTime() >= deployStartedAt - 15000;
+    const newPods = pods.filter(isNew);
+    const oldPods = pods.filter((p) => !isNew(p));
+
+    if (newPods.length > 0 && oldPods.length === 0 && newPods.every(isPodReady)) {
+      return { ok: true };
+    }
+  }
+
+  return {
+    ok: false,
+    error: `Jenkins deploy finished but the rollout of "${appName}" did not settle within 10 minutes — check the pods, then retry or mark the step done manually`,
+  };
+}
+
 async function runJenkins(
   plan: RunPlan,
   step: RunPlanStep,
   target: ResolvedTarget,
   control: RunControl
 ): Promise<{ ok: boolean; error?: string }> {
+  const deployStartedAt = Date.now();
   const { executionId } = await triggerDeploy(step.id, target.jenkinsService!, target.jenkinsBranch ?? '');
   const deadline = Date.now() + JENKINS_MAX_WAIT_MS;
 
@@ -302,7 +353,9 @@ async function runJenkins(
     if (control.cancelled) return { ok: false, error: 'Cancelled' };
     await sleep(JENKINS_POLL_INTERVAL_MS);
     const status = await getDeployStatus(executionId);
-    if (status.state === 'completed') return { ok: true };
+    if (status.state === 'completed') {
+      return waitForRollout(plan, step, target, control, deployStartedAt);
+    }
     if (status.state === 'failed') {
       return { ok: false, error: `Jenkins build failed${status.result ? `: ${status.result}` : ''}` };
     }
