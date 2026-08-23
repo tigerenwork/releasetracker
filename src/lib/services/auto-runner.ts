@@ -310,7 +310,13 @@ async function waitForRollout(
   deployStartedAt: number
 ): Promise<{ ok: boolean; error?: string }> {
   const appName = plan.executionConfig?.jenkinsConfig?.servicePodMap?.[target.jenkinsService!];
-  if (!appName || !agentBridge) return { ok: true };
+  if (!agentBridge) return { ok: true };
+  if (!appName) {
+    return {
+      ok: false,
+      error: `Jenkins deploy finished, but no service→pod mapping exists for "${target.jenkinsService}" — the rollout cannot be verified. Add the mapping on the customer edit page, then retry`,
+    };
+  }
 
   const ctx = buildContext(plan, step, { ...target, podSelector: '' });
   const deadline = Date.now() + ROLLOUT_MAX_WAIT_MS;
