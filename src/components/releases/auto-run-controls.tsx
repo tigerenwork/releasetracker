@@ -58,6 +58,10 @@ interface CustomerRunState {
 
 const CONCURRENCY_KEY = 'rt-auto-run-concurrency';
 
+// Window event the matrix customer headers dispatch to trigger a single-customer
+// run (the matrix and this card are independent component trees on the page)
+export const RUN_CUSTOMER_EVENT = 'rt-auto-run-customer';
+
 // Mirrors the runner's isRunnable policy (done/skipped are left alone)
 const RUNNABLE_STATUSES = new Set(['pending', 'failed', 'running', 'reverted']);
 
@@ -200,6 +204,34 @@ export function AutoRunControls({ releaseId, customers }: AutoRunControlsProps) 
     });
   };
 
+  // Single-customer run (matrix header button or the dialog's per-row play):
+  // joins the active pool run alongside it, or starts a fresh run otherwise
+  const startCustomerRun = (customerId: number) => {
+    const st = statuses[customerId]?.status;
+    if (st === 'running' || st === 'queued') return;
+    if (running) {
+      rerunCustomer(customerId);
+    } else {
+      startRun([customerId]);
+    }
+  };
+
+  // Listen for per-customer run requests from the matrix column headers.
+  // handlerRef always points at the latest closure, so the listener itself
+  // is registered only once.
+  const runRequestHandlerRef = useRef<(customerId: number) => void>(() => {});
+  useEffect(() => {
+    runRequestHandlerRef.current = startCustomerRun;
+  });
+  useEffect(() => {
+    const listener = (e: Event) => {
+      const customerId = (e as CustomEvent<{ customerId: number }>).detail?.customerId;
+      if (typeof customerId === 'number') runRequestHandlerRef.current(customerId);
+    };
+    window.addEventListener(RUN_CUSTOMER_EVENT, listener);
+    return () => window.removeEventListener(RUN_CUSTOMER_EVENT, listener);
+  }, []);
+
   const customersWithStatus = customers.filter((c) => statuses[c.id]);
   const hasStatuses = customersWithStatus.length > 0;
 
@@ -262,7 +294,7 @@ export function AutoRunControls({ releaseId, customers }: AutoRunControlsProps) 
                           title="Run only this customer"
                           onClick={() => {
                             setDialogOpen(false);
-                            startRun([c.id]);
+                            startCustomerRun(c.id);
                           }}
                         >
                           <Play className="w-3.5 h-3.5" />

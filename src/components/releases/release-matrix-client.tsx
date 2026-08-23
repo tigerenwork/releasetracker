@@ -2,12 +2,13 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Plus, CheckCircle, Circle, SkipForward, RotateCcw, FileText, Edit, Loader2, XCircle } from 'lucide-react';
+import { Plus, CheckCircle, Circle, SkipForward, RotateCcw, FileText, Edit, Loader2, XCircle, Play } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { StepDetailPanel } from '@/components/steps/step-detail-panel';
 import { AddCustomStepDialog } from '@/components/steps/add-custom-step-dialog';
+import { RUN_CUSTOMER_EVENT } from '@/components/releases/auto-run-controls';
 
 interface ReleaseMatrixClientProps {
   stepsByCluster: any;
@@ -224,7 +225,25 @@ export function ReleaseMatrixClient({ stepsByCluster, category, releaseId, readO
                                 </div>
                               ) : null;
                             })()}
-                            <div className="mt-2">
+                            <div className="mt-2 flex items-center justify-center gap-1">
+                              {!readOnly && (
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  className="h-7 w-7"
+                                  title="Auto-run this customer's steps (deploy + verify)"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    window.dispatchEvent(
+                                      new CustomEvent(RUN_CUSTOMER_EVENT, {
+                                        detail: { customerId: customer.customer.id },
+                                      })
+                                    );
+                                  }}
+                                >
+                                  <Play className="w-3.5 h-3.5" />
+                                </Button>
+                              )}
                               {!readOnly && (
                                 <AddCustomStepDialog
                                   releaseId={releaseId}
