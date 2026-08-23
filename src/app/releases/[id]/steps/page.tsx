@@ -33,6 +33,7 @@ import {
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { ConfigMapContentEditor } from '@/components/steps/configmap-content-editor';
+import type { StepExecutionConfig } from '@/lib/db/schema';
 
 interface Step {
   id: number;
@@ -42,6 +43,129 @@ interface Step {
   content: string;
   orderIndex: number;
   description?: string;
+  executionConfig?: StepExecutionConfig | null;
+}
+
+// Step types whose auto-run target is a pod (+ optional container)
+const POD_TARGET_TYPES = ['bash', 'sql', 'script', 'rest', 'configmap'];
+
+// "Automation target" section of the template add/edit dialog: per-type
+// defaults the auto-runner uses when no per-customer override exists.
+function AutomationTargetFields({ type, config }: { type: string; config?: StepExecutionConfig | null }) {
+  if (type === 'text') return null;
+  const inputCls = 'w-full p-2 border rounded';
+
+  return (
+    <div className="border rounded p-3 space-y-3 bg-slate-50">
+      <p className="text-sm font-medium text-slate-500">
+        Automation target <span className="font-normal text-slate-400">(optional — used by auto-run)</span>
+      </p>
+
+      {POD_TARGET_TYPES.includes(type) && (
+        <div className="space-y-3">
+          <div>
+            <label className="text-sm font-medium">Deployment / service name</label>
+            <input name="ec_deployment" defaultValue={config?.target?.deployment ?? ''} placeholder="aldebaran" className={inputCls} />
+            <p className="text-xs text-slate-400 mt-1">Stable name — the pod is located from it at run time, even across rollouts.</p>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="text-sm font-medium">Pod selector</label>
+              <input name="ec_podSelector" defaultValue={config?.target?.podSelector ?? ''} placeholder="app=my-service (advanced)" className={inputCls} />
+            </div>
+            <div>
+              <label className="text-sm font-medium">Default container</label>
+              <input name="ec_containerName" defaultValue={config?.target?.containerName ?? ''} placeholder="optional" className={inputCls} />
+            </div>
+          </div>
+        </div>
+      )}
+
+      {type === 'jenkins' && (
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <label className="text-sm font-medium">Default service</label>
+            <input name="ec_jenkinsService" defaultValue={config?.jenkins?.service ?? ''} placeholder="optional" className={inputCls} />
+            <p className="text-xs text-slate-400 mt-1">Jenkins job name, or the k8s service name when the customer has a service→pod mapping.</p>
+          </div>
+          <div>
+            <label className="text-sm font-medium">Default branch</label>
+            <input name="ec_jenkinsBranch" defaultValue={config?.jenkins?.branch ?? ''} placeholder="optional" className={inputCls} />
+          </div>
+        </div>
+      )}
+
+      {type === 'script' && (
+        <div>
+          <label className="text-sm font-medium">Interpreter</label>
+          <select name="ec_interpreter" defaultValue={config?.script?.interpreter ?? 'sh'} className={inputCls}>
+            <option value="sh">sh</option>
+            <option value="bash">bash</option>
+            <option value="python">python</option>
+            <option value="node">node</option>
+          </select>
+        </div>
+      )}
+
+      {type === 'configmap' && (
+        <div className="grid grid-cols-2 gap-3 items-end">
+          <div>
+            <label className="text-sm font-medium">ConfigMap name</label>
+            <input name="ec_configMapName" defaultValue={config?.configmap?.configMapName ?? ''} placeholder="optional" className={inputCls} />
+          </div>
+          <label className="flex items-center gap-2 text-sm font-medium pb-2">
+            <input type="checkbox" name="ec_rolloutRestart" defaultChecked={config?.configmap?.rolloutRestart ?? false} />
+            Rollout restart after apply
+          </label>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// Build the executionConfig payload from the dialog's ec_* fields; empty
+// fields are omitted and an all-empty config becomes null (clears on edit).
+function buildExecutionConfig(type: string, formData: FormData): StepExecutionConfig | null {
+  const str = (key: string) => {
+    const v = formData.get(key);
+    return typeof v === 'string' && v.trim() ? v.trim() : undefined;
+  };
+  const config: StepExecutionConfig = {};
+
+  if (POD_TARGET_TYPES.includes(type)) {
+    const deployment = str('ec_deployment');
+    const podSelector = str('ec_podSelector');
+    const containerName = str('ec_containerName');
+    if (deployment || podSelector || containerName) {
+      config.target = {
+        ...(deployment ? { deployment } : {}),
+        ...(podSelector ? { podSelector } : {}),
+        ...(containerName ? { containerName } : {}),
+      };
+    }
+  }
+  if (type === 'jenkins') {
+    const service = str('ec_jenkinsService');
+    const branch = str('ec_jenkinsBranch');
+    if (service || branch) {
+      config.jenkins = { ...(service ? { service } : {}), ...(branch ? { branch } : {}) };
+    }
+  }
+  if (type === 'script') {
+    const interpreter = str('ec_interpreter');
+    if (interpreter && interpreter !== 'sh') {
+      config.script = { interpreter: interpreter as 'sh' | 'bash' | 'python' | 'node' };
+    }
+  }
+  if (type === 'configmap') {
+    const configMapName = str('ec_configMapName');
+    const rolloutRestart = formData.get('ec_rolloutRestart') === 'on';
+    if (configMapName || rolloutRestart) {
+      config.configmap = { ...(configMapName ? { configMapName } : {}), rolloutRestart };
+    }
+  }
+
+  return Object.keys(config).length > 0 ? config : null;
 }
 
 interface PageProps {
@@ -52,7 +176,7 @@ interface PageProps {
 
 export default function StepsPage({ params }: PageProps) {
   const [releaseId, setReleaseId] = useState<string>('');
-  const [release, setRelease] = useState<any>(null);
+  const [release, setRelease] = useState<{ name: string } | null>(null);
   const [deploySteps, setDeploySteps] = useState<Step[]>([]);
   const [verifySteps, setVerifySteps] = useState<Step[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -155,6 +279,7 @@ function StepList({ steps, category, releaseId, onUpdate }: StepListProps) {
 
   async function handleAddStep(formData: FormData) {
     try {
+      const type = String(formData.get('type'));
       const response = await fetch('/api/steps', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -165,6 +290,7 @@ function StepList({ steps, category, releaseId, onUpdate }: StepListProps) {
           type: formData.get('type'),
           content: formData.get('content'),
           description: formData.get('description'),
+          executionConfig: buildExecutionConfig(type, formData),
         }),
       });
       if (response.ok) {
@@ -274,6 +400,7 @@ function StepList({ steps, category, releaseId, onUpdate }: StepListProps) {
                 <label className="text-sm font-medium">Description</label>
                 <input name="description" className="w-full p-2 border rounded" />
               </div>
+              <AutomationTargetFields type={addType} />
               <Button type="submit">Add Step</Button>
             </form>
           </DialogContent>
@@ -339,6 +466,7 @@ function SortableStepItem({ step, index, onDelete, onUpdate }: SortableStepItemP
 
   async function handleEditStep(formData: FormData) {
     try {
+      const type = String(formData.get('type'));
       const response = await fetch(`/api/steps/${step.id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
@@ -347,6 +475,7 @@ function SortableStepItem({ step, index, onDelete, onUpdate }: SortableStepItemP
           type: formData.get('type'),
           content: formData.get('content'),
           description: formData.get('description'),
+          executionConfig: buildExecutionConfig(type, formData),
         }),
       });
       if (response.ok) {
@@ -428,6 +557,7 @@ function SortableStepItem({ step, index, onDelete, onUpdate }: SortableStepItemP
               <label className="text-sm font-medium">Description</label>
               <input name="description" defaultValue={step.description ?? ''} className="w-full p-2 border rounded" />
             </div>
+            <AutomationTargetFields type={editType} config={step.executionConfig} />
             <Button type="submit">Save Changes</Button>
           </form>
         </DialogContent>

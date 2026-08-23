@@ -4,7 +4,7 @@ import { addStepTemplate, getNextOrderIndex } from '@/lib/actions/step-templates
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { releaseId, category, name, type, content, description } = body;
+    const { releaseId, category, name, type, content, description, executionConfig } = body;
 
     const orderIndex = await getNextOrderIndex(releaseId, category);
 
@@ -16,6 +16,7 @@ export async function POST(request: NextRequest) {
       content,
       orderIndex,
       description,
+      executionConfig: executionConfig ?? null,
     });
 
     return NextResponse.json(step);

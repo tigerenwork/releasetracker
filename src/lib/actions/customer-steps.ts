@@ -2,7 +2,9 @@
 
 import { db } from '@/lib/db';
 import { 
-  customerSteps, 
+  customerSteps,
+  customers,
+  customerExecutionConfigs,
   releaseCustomers,
   type StepCategory, 
   type StepType 
@@ -112,6 +114,34 @@ export async function markStepDone(stepId: number, notes?: string) {
     .update(customerSteps)
     .set({ 
       status: 'done',
+      executedAt: new Date(),
+      notes: notes || null,
+      updatedAt: new Date()
+    })
+    .where(eq(customerSteps.id, stepId))
+    .returning();
+  revalidatePath(`/releases/${step.releaseId}`);
+  return step;
+}
+
+export async function markStepRunning(stepId: number) {
+  const [step] = await db
+    .update(customerSteps)
+    .set({ 
+      status: 'running',
+      updatedAt: new Date()
+    })
+    .where(eq(customerSteps.id, stepId))
+    .returning();
+  revalidatePath(`/releases/${step.releaseId}`);
+  return step;
+}
+
+export async function markStepFailed(stepId: number, notes?: string) {
+  const [step] = await db
+    .update(customerSteps)
+    .set({ 
+      status: 'failed',
       executedAt: new Date(),
       notes: notes || null,
       updatedAt: new Date()
@@ -317,4 +347,31 @@ export async function getStepStats(releaseId: number) {
     reverted,
     percentage: total > 0 ? Math.round(((done + skipped) / total) * 100) : 0,
   };
+}
+
+// Everything the auto-runner needs for one customer, in a single fetch:
+// the customer (with cluster for kubeContext), ordered steps (deploy before
+// verify, each with its template's executionConfig), and the per-customer
+// execution config (SQL defaults, jenkins mapping, step target overrides).
+export async function getCustomerRunPlan(releaseId: number, customerId: number) {
+  const customer = await db.query.customers.findFirst({
+    where: eq(customers.id, customerId),
+    with: { cluster: true },
+  });
+  if (!customer) throw new Error('Customer not found');
+
+  const steps = await db.query.customerSteps.findMany({
+    where: and(
+      eq(customerSteps.releaseId, releaseId),
+      eq(customerSteps.customerId, customerId)
+    ),
+    orderBy: [customerSteps.category, asc(customerSteps.orderIndex)],
+    with: { template: true },
+  });
+
+  const executionConfig = await db.query.customerExecutionConfigs.findFirst({
+    where: eq(customerExecutionConfigs.customerId, customerId),
+  });
+
+  return { customer, steps, executionConfig: executionConfig ?? null };
 }

@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { X, RotateCcw, Pencil, Trash2, FileText, AlertCircle, CheckCircle, Check, SkipForward, Copy, Globe } from 'lucide-react';
+import { X, RotateCcw, Pencil, Trash2, FileText, AlertCircle, CheckCircle, Check, SkipForward, Copy, Globe, Loader2, XCircle, Save } from 'lucide-react';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -13,6 +13,11 @@ import { ConfigMapExecutor } from '@/components/executors/configmap-executor';
 import { SqlExecutor } from '@/components/executors/sql-step-executor';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
+import { getLastScriptExecution } from '@/lib/actions/step-executions';
+import { getLastDeploy } from '@/lib/actions/jenkins';
+import { saveStepTargetOverride } from '@/lib/actions/customers';
+import { appFromPodName } from '@/lib/grafana';
+import type { StepTargetOverride } from '@/lib/db/schema';
 import {
   Dialog,
   DialogContent,
@@ -57,6 +62,67 @@ function CopyButton({ text }: { text: string }) {
   );
 }
 
+// Step types the auto-runner can execute unattended (text stays manual)
+const AUTO_RUNNABLE_TYPES = ['bash', 'sql', 'script', 'rest', 'configmap', 'jenkins'];
+
+// Persists the target of the last manual run as this customer's default for
+// auto-run (stored as a per-step override in customerExecutionConfigs).
+function SaveDefaultTargetButton({
+  step,
+}: {
+  step: { id: number; customerId: number; templateId: number | null; type: string };
+}) {
+  const [state, setState] = useState<'idle' | 'saving' | 'saved' | 'empty' | 'error'>('idle');
+
+  const handleSave = async () => {
+    setState('saving');
+    try {
+      const override: StepTargetOverride = {};
+      if (step.type === 'jenkins') {
+        const last = await getLastDeploy(step.id);
+        if (last?.service) override.jenkinsService = last.service;
+        if (last?.branch) override.jenkinsBranch = last.branch;
+      } else {
+        const last = await getLastScriptExecution(step.id, step.type === 'sql' ? 'sql' : 'script');
+        const req = (last?.request ?? {}) as {
+          deployment?: string;
+          podSelector?: string;
+          podName?: string;
+          containerName?: string;
+        };
+        // Prefer the stable deployment name (derived from the pod when the
+        // manual run only recorded a podName) over an ephemeral pod name
+        if (req.deployment) override.deployment = req.deployment;
+        else if (req.podSelector) override.podSelector = req.podSelector;
+        else if (req.podName) override.deployment = appFromPodName(req.podName);
+        if (req.containerName) override.containerName = req.containerName;
+      }
+
+      if (Object.keys(override).length === 0) {
+        setState('empty');
+      } else {
+        await saveStepTargetOverride(step.customerId, String(step.templateId ?? step.id), override);
+        setState('saved');
+      }
+    } catch {
+      setState('error');
+    }
+    setTimeout(() => setState('idle'), 4000);
+  };
+
+  return (
+    <div className="flex items-center gap-2 flex-wrap">
+      <Button variant="outline" size="sm" onClick={handleSave} disabled={state === 'saving'}>
+        <Save className="w-3.5 h-3.5 mr-1" />
+        Save as default target
+      </Button>
+      {state === 'saved' && <span className="text-sm text-green-600">Saved — auto-run will use this target.</span>}
+      {state === 'empty' && <span className="text-sm text-slate-500">Nothing to save — run the step once first.</span>}
+      {state === 'error' && <span className="text-sm text-red-600">Failed to save the default target.</span>}
+    </div>
+  );
+}
+
 interface StepDetailPanelProps {
   step: any;
   template: any;
@@ -76,14 +142,18 @@ interface StepDetailPanelProps {
 
 const statusIcons = {
   pending: <div className="w-5 h-5 rounded-full border-2 border-slate-300" />,
+  running: <Loader2 className="w-5 h-5 text-blue-500 animate-spin" />,
   done: <CheckCircle className="w-5 h-5 text-green-500" />,
+  failed: <XCircle className="w-5 h-5 text-red-500" />,
   skipped: <SkipForward className="w-5 h-5 text-amber-500" />,
   reverted: <RotateCcw className="w-5 h-5 text-red-500" />,
 };
 
 const statusLabels = {
   pending: 'Pending',
+  running: 'Running',
   done: 'Done',
+  failed: 'Failed',
   skipped: 'Skipped',
   reverted: 'Reverted',
 };
@@ -395,6 +465,21 @@ export function StepDetailPanel({
             )}
 
             {step.type === 'configmap' && <Separator />}
+
+            {/* Save the last manual run's target as this customer's auto-run default */}
+            {!readOnly && AUTO_RUNNABLE_TYPES.includes(step.type) && (
+              <>
+                <div>
+                  <label className="text-sm font-medium text-slate-500 mb-2 block">Auto-run</label>
+                  {/* key resets the feedback state when another step is opened */}
+                  <SaveDefaultTargetButton key={step.id} step={step} />
+                  <p className="text-xs text-slate-400 mt-1">
+                    Defaults feed auto-run for this customer; per-customer overrides win over template defaults.
+                  </p>
+                </div>
+                <Separator />
+              </>
+            )}
 
             {/* Execution Section */}
             {!readOnly && step.status !== 'done' && step.status !== 'skipped' && (

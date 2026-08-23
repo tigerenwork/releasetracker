@@ -10,6 +10,7 @@ import { getReleaseStepsGroupedByCluster, getStepStats } from '@/lib/actions/cus
 import { listCustomers } from '@/lib/actions/customers';
 import { ReleaseMatrixClient } from '@/components/releases/release-matrix-client';
 import { ReleaseActions } from '@/components/releases/release-actions';
+import { AutoRunControls } from '@/components/releases/auto-run-controls';
 import { CustomerPodsSheet } from '@/components/pods/customer-pods-sheet';
 
 interface ReleaseDetailPageProps {
@@ -68,6 +69,19 @@ export default async function ReleaseDetailPage({ params }: ReleaseDetailPagePro
       (c: { customer: { id: number } }) => c.customer.id
     )
   );
+
+  // Enrolled customers for the auto-run controls (id/name/namespace/cluster only)
+  type StepsByCluster = Awaited<ReturnType<typeof getReleaseStepsGroupedByCluster>>;
+  const autoRunCustomers = hasMatrix
+    ? Object.values(stepsByCluster as StepsByCluster).flatMap((clusterData) =>
+        Object.values(clusterData.customers).map((c) => ({
+          id: c.customer.id,
+          name: c.customer.name,
+          namespace: c.customer.namespace,
+          clusterName: clusterData.cluster?.name ?? null,
+        }))
+      )
+    : [];
 
   return (
     <div className="space-y-6">
@@ -156,6 +170,11 @@ export default async function ReleaseDetailPage({ params }: ReleaseDetailPagePro
           )}
         </CardContent>
       </Card>
+
+      {/* Auto-run controls (active releases only; the page must stay open during a run) */}
+      {release.status === 'active' && autoRunCustomers.length > 0 && (
+        <AutoRunControls releaseId={releaseId} customers={autoRunCustomers} />
+      )}
 
       {/* Steps Management (draft and active releases) */}
       {(release.status === 'draft' || release.status === 'active') && (

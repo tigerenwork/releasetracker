@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Plus, CheckCircle, Circle, SkipForward, RotateCcw, FileText, Edit } from 'lucide-react';
+import { Plus, CheckCircle, Circle, SkipForward, RotateCcw, FileText, Edit, Loader2, XCircle } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -25,7 +25,9 @@ function getDeployStatus(customerSteps: any[]): { done: number; total: number } 
 
 const statusIcons = {
   pending: <Circle className="w-5 h-5 text-slate-300" />,
+  running: <Loader2 className="w-5 h-5 text-blue-500 animate-spin" />,
   done: <CheckCircle className="w-5 h-5 text-green-500" />,
+  failed: <XCircle className="w-5 h-5 text-red-500" />,
   skipped: <SkipForward className="w-5 h-5 text-amber-500" />,
   reverted: <RotateCcw className="w-5 h-5 text-red-500" />,
 };

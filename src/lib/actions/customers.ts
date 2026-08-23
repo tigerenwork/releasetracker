@@ -1,7 +1,7 @@
 'use server';
 
 import { db } from '@/lib/db';
-import { customers, clusters, customerExecutionConfigs } from '@/lib/db/schema';
+import { customers, clusters, customerExecutionConfigs, type StepTargetOverride } from '@/lib/db/schema';
 import { eq, and } from 'drizzle-orm';
 import { revalidatePath } from 'next/cache';
 
@@ -89,6 +89,44 @@ export async function getCustomerSqlConfig(customerId: number) {
     where: eq(customerExecutionConfigs.customerId, customerId),
   });
   return row?.sqlConfig || null;
+}
+
+// Full per-customer execution config (SQL defaults, jenkins mapping, step overrides)
+export async function getCustomerExecutionConfig(customerId: number) {
+  const row = await db.query.customerExecutionConfigs.findFirst({
+    where: eq(customerExecutionConfigs.customerId, customerId),
+  });
+  return row ?? null;
+}
+
+// Upsert one per-step target override (keyed by templateId, or customerStep id
+// for custom steps). Pass null to remove the override.
+export async function saveStepTargetOverride(
+  customerId: number,
+  key: string,
+  override: StepTargetOverride | null
+) {
+  const existing = await db.query.customerExecutionConfigs.findFirst({
+    where: eq(customerExecutionConfigs.customerId, customerId),
+  });
+
+  const stepOverrides = { ...(existing?.stepOverrides || {}) };
+  if (override) {
+    stepOverrides[key] = override;
+  } else {
+    delete stepOverrides[key];
+  }
+
+  if (existing) {
+    await db
+      .update(customerExecutionConfigs)
+      .set({ stepOverrides, updatedAt: new Date() })
+      .where(eq(customerExecutionConfigs.id, existing.id));
+  } else {
+    await db.insert(customerExecutionConfigs).values({ customerId, stepOverrides });
+  }
+
+  revalidatePath(`/customers/${customerId}`);
 }
 
 export async function getCustomersGroupedByCluster() {

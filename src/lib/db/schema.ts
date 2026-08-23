@@ -71,7 +71,7 @@ export const stepTemplates = sqliteTable('step_templates', {
   orderIndex: integer('order_index').notNull(),
   description: text('description'),
   // Metadata for automated execution
-  executionConfig: text('execution_config', { mode: 'json' }).$type<Record<string, any>>(),
+  executionConfig: text('execution_config', { mode: 'json' }).$type<StepExecutionConfig>(),
   createdAt: integer('created_at', { mode: 'timestamp' }).$defaultFn(() => new Date()),
 }, (table) => ({
   uniqueOrderPerReleaseCategory: uniqueIndex('unique_order_per_release_category')
@@ -98,7 +98,7 @@ export const customerSteps = sqliteTable('customer_steps', {
   orderIndex: integer('order_index').notNull(),
 
   // Execution tracking
-  status: text('status', { enum: ['pending', 'done', 'skipped', 'reverted'] }).default('pending'),
+  status: text('status', { enum: ['pending', 'running', 'done', 'failed', 'skipped', 'reverted'] }).default('pending'),
   executedAt: integer('executed_at', { mode: 'timestamp' }),
   executedBy: text('executed_by'),
   skipReason: text('skip_reason'),
@@ -162,6 +162,10 @@ export const customerExecutionConfigs = sqliteTable('customer_execution_configs'
     branchParam?: string;
     servicePodMap?: Record<string, string>;
   }>(),
+
+  // Per-step target overrides for automated execution,
+  // keyed by templateId (or customerStep id for custom steps)
+  stepOverrides: text('step_overrides', { mode: 'json' }).$type<Record<string, StepTargetOverride>>(),
   
   isActive: integer('is_active', { mode: 'boolean' }).default(true),
   createdAt: integer('created_at', { mode: 'timestamp' }).$defaultFn(() => new Date()),
@@ -306,6 +310,44 @@ export type StepCategory = 'deploy' | 'verify';
 export type StepType = 'bash' | 'sql' | 'rest' | 'script' | 'text' | 'jenkins' | 'configmap';
 export type ReleaseType = 'onboarding' | 'release' | 'hotfix';
 export type ReleaseStatus = 'draft' | 'active' | 'archived';
-export type StepStatus = 'pending' | 'done' | 'skipped' | 'reverted';
+export type StepStatus = 'pending' | 'running' | 'done' | 'failed' | 'skipped' | 'reverted';
 export type ExecutionStatus = 'running' | 'completed' | 'failed' | 'cancelled' | 'timeout';
 export type ExecutionType = 'sql' | 'rest' | 'script' | 'jenkins';
+
+// ==================== Automation config shapes ====================
+// stepTemplates.executionConfig: per-step defaults for automated execution
+export interface StepExecutionConfig {
+  /** bash/sql/script/rest/configmap target */
+  target?: {
+    /** stable deployment/service name (e.g. "aldebaran") — resolved to a pod at run time */
+    deployment?: string;
+    /** label selector (e.g. "app=my-service"); used directly when deployment is unset */
+    podSelector?: string;
+    containerName?: string;
+  };
+  /** jenkins defaults */
+  jenkins?: {
+    service?: string;
+    branch?: string;
+  };
+  /** script interpreter (default 'sh') */
+  script?: {
+    interpreter?: 'sh' | 'bash' | 'python' | 'node';
+  };
+  /** configmap behavior */
+  configmap?: {
+    /** target ConfigMap; when unset, the deployment's single ConfigMap is used */
+    configMapName?: string;
+    rolloutRestart?: boolean;
+  };
+}
+
+// customerExecutionConfigs.stepOverrides: per-customer per-step target overrides,
+// keyed by templateId (or customerStep id for custom steps)
+export interface StepTargetOverride {
+  deployment?: string;
+  podSelector?: string;
+  containerName?: string;
+  jenkinsService?: string;
+  jenkinsBranch?: string;
+}

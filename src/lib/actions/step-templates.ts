@@ -1,7 +1,7 @@
 'use server';
 
 import { db } from '@/lib/db';
-import { stepTemplates, customerSteps, releases, releaseCustomers, type StepCategory, type StepType } from '@/lib/db/schema';
+import { stepTemplates, customerSteps, releases, releaseCustomers, type StepCategory, type StepType, type StepExecutionConfig } from '@/lib/db/schema';
 import { eq, and } from 'drizzle-orm';
 import { revalidatePath } from 'next/cache';
 
@@ -13,6 +13,7 @@ export type StepTemplateInput = {
   content: string;
   orderIndex: number;
   description?: string;
+  executionConfig?: StepExecutionConfig | null;
 };
 
 export async function addStepTemplate(data: StepTemplateInput) {

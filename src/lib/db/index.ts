@@ -161,7 +161,7 @@ const CREATE_TABLES_SQL = `
     type TEXT NOT NULL CHECK(type IN ('bash', 'sql', 'rest', 'script', 'text', 'jenkins', 'configmap')),
     content TEXT NOT NULL,
     order_index INTEGER NOT NULL,
-    status TEXT DEFAULT 'pending' CHECK(status IN ('pending', 'done', 'skipped', 'reverted')),
+    status TEXT DEFAULT 'pending' CHECK(status IN ('pending', 'running', 'done', 'failed', 'skipped', 'reverted')),
     executed_at INTEGER,
     executed_by TEXT,
     skip_reason TEXT,
@@ -199,6 +199,7 @@ const CREATE_TABLES_SQL = `
     rest_config TEXT,
     script_config TEXT,
     jenkins_config TEXT,
+    step_overrides TEXT,
     is_active INTEGER DEFAULT 1,
     created_at INTEGER DEFAULT (unixepoch() * 1000),
     updated_at INTEGER DEFAULT (unixepoch() * 1000),
@@ -302,7 +303,7 @@ const CUSTOMER_STEPS_DDL = `
     type TEXT NOT NULL CHECK(type IN ('bash', 'sql', 'rest', 'script', 'text', 'jenkins', 'configmap')),
     content TEXT NOT NULL,
     order_index INTEGER NOT NULL,
-    status TEXT DEFAULT 'pending' CHECK(status IN ('pending', 'done', 'skipped', 'reverted')),
+    status TEXT DEFAULT 'pending' CHECK(status IN ('pending', 'running', 'done', 'failed', 'skipped', 'reverted')),
     executed_at INTEGER,
     executed_by TEXT,
     skip_reason TEXT,
@@ -355,9 +356,15 @@ const STEP_EXECUTIONS_INDEXES = [
 // makes every pre-existing row read a non-JSON string and breaks JSON parsing
 const BAD_EXECUTION_CONFIG_DEFAULT = /execution_config[^,)]*DEFAULT/i;
 const TYPE_CHECK_RE = /CHECK\(type IN \(([^)]*)\)\)/i;
+const STATUS_CHECK_RE = /CHECK\(status IN \(([^)]*)\)\)/i;
 
 function typeCheckLacks(ddl: string, value: string) {
   const match = ddl.match(TYPE_CHECK_RE);
+  return !!match && !match[1].includes(`'${value}'`);
+}
+
+function statusCheckLacks(ddl: string, value: string) {
+  const match = ddl.match(STATUS_CHECK_RE);
   return !!match && !match[1].includes(`'${value}'`);
 }
 
@@ -374,7 +381,7 @@ function rebuildPlanFor(table: string, ddl: string) {
   if (table === 'step_templates' && (typeCheckLacks(ddl, 'configmap') || BAD_EXECUTION_CONFIG_DEFAULT.test(ddl))) {
     return { table, ddl: STEP_TEMPLATES_DDL, insertCols: STEP_TEMPLATES_COLS, selectCols: STEP_TEMPLATES_SELECT_COLS, after: [] as string[] };
   }
-  if (table === 'customer_steps' && typeCheckLacks(ddl, 'configmap')) {
+  if (table === 'customer_steps' && (typeCheckLacks(ddl, 'configmap') || statusCheckLacks(ddl, 'failed'))) {
     return { table, ddl: CUSTOMER_STEPS_DDL, insertCols: CUSTOMER_STEPS_COLS, selectCols: CUSTOMER_STEPS_COLS, after: [] as string[] };
   }
   // Rebuild when the CHECK predates 'jenkins', or when a previous table rebuild
@@ -402,6 +409,9 @@ function migrateSqlite(client: Database.Database) {
   const configColumns = client.prepare('PRAGMA table_info(customer_execution_configs)').all() as { name: string }[];
   if (!configColumns.some((c) => c.name === 'jenkins_config')) {
     client.exec('ALTER TABLE customer_execution_configs ADD COLUMN jenkins_config TEXT');
+  }
+  if (!configColumns.some((c) => c.name === 'step_overrides')) {
+    client.exec('ALTER TABLE customer_execution_configs ADD COLUMN step_overrides TEXT');
   }
 
   // 4. Add customers.website_url if missing
@@ -452,6 +462,9 @@ async function migrateTurso(client: ReturnType<typeof createClient>) {
   const configColumns = await client.execute('PRAGMA table_info(customer_execution_configs)');
   if (!configColumns.rows.some((c) => c.name === 'jenkins_config')) {
     await client.execute('ALTER TABLE customer_execution_configs ADD COLUMN jenkins_config TEXT');
+  }
+  if (!configColumns.rows.some((c) => c.name === 'step_overrides')) {
+    await client.execute('ALTER TABLE customer_execution_configs ADD COLUMN step_overrides TEXT');
   }
 
   // 4. Add customers.website_url if missing
