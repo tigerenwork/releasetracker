@@ -4,7 +4,6 @@ import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Textarea } from '@/components/ui/textarea';
 import {
   Dialog,
   DialogContent,
@@ -18,9 +17,10 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Loader2, Plus, X } from 'lucide-react';
+import { Braces, Loader2, Plus, X } from 'lucide-react';
 import { updateEvent, type EventUpdate } from '@/lib/cronicle/client';
 import type { CronicleCategory, CronicleConfig, CronicleEvent } from '@/lib/cronicle/types';
+import { JsonEditor } from '@/components/cronicle/json-editor';
 import {
   TimingEditor,
   buildTiming,
@@ -52,6 +52,8 @@ type RawTimingKey = (typeof TIMING_FIELDS)[number]['key'];
 /** Plugin params promoted to a dedicated "Request" section (HTTP-style plugins) */
 const PROMOTED_PARAMS = ['method', 'url', 'data'] as const;
 type PromotedKey = (typeof PROMOTED_PARAMS)[number];
+
+const HTTP_METHODS = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'HEAD', 'OPTIONS'];
 
 interface ParamRow {
   key: string;
@@ -122,6 +124,7 @@ export function EventEditDialog({
 
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [jsonError, setJsonError] = useState<string | null>(null);
 
   // Reset the form whenever a different event is opened
   useEffect(() => {
@@ -147,7 +150,17 @@ export function EventEditDialog({
     setPromoted(promotedValues);
     setParams(rest);
     setError(null);
+    setJsonError(null);
   }, [open, event]);
+
+  const formatData = () => {
+    try {
+      setPromoted({ ...promoted, data: JSON.stringify(JSON.parse(promoted.data), null, 2) });
+      setJsonError(null);
+    } catch (err) {
+      setJsonError(err instanceof Error ? err.message : String(err));
+    }
+  };
 
   const switchTimingMode = (next: 'visual' | 'raw') => {
     if (next === timingMode) return;
@@ -229,7 +242,7 @@ export function EventEditDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-3xl max-h-[85vh] overflow-y-auto">
+      <DialogContent className="max-w-[calc(100%-2rem)] sm:max-w-5xl max-h-[85vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Edit Event</DialogTitle>
         </DialogHeader>
@@ -260,36 +273,61 @@ export function EventEditDialog({
           </div>
 
           {showRequestSection && (
-            <div className="space-y-3 rounded-md border p-3">
+            <div className="space-y-3 rounded-md border p-4">
               <Label>Request</Label>
-              <div className="flex items-center gap-2">
-                <div className="space-y-1">
-                  <span className="text-xs text-slate-400">Method</span>
-                  <Input
-                    className="w-28"
-                    value={promoted.method}
-                    onChange={(e) => setPromoted({ ...promoted, method: e.target.value })}
-                    placeholder="POST"
-                  />
-                </div>
-                <div className="space-y-1 flex-1">
-                  <span className="text-xs text-slate-400">URL</span>
-                  <Input
-                    className="font-mono"
-                    value={promoted.url}
-                    onChange={(e) => setPromoted({ ...promoted, url: e.target.value })}
-                    placeholder="http://…"
-                  />
-                </div>
+              <div className="space-y-1">
+                <span className="text-xs text-slate-400">Method</span>
+                <Select
+                  value={promoted.method}
+                  onValueChange={(v) => setPromoted({ ...promoted, method: v })}
+                >
+                  <SelectTrigger className="w-40">
+                    <SelectValue placeholder="GET" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {(HTTP_METHODS.includes(promoted.method) || !promoted.method
+                      ? HTTP_METHODS
+                      : [...HTTP_METHODS, promoted.method]
+                    ).map((m) => (
+                      <SelectItem key={m} value={m}>
+                        {m}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
               <div className="space-y-1">
-                <span className="text-xs text-slate-400">Data</span>
-                <Textarea
-                  className="font-mono text-xs"
-                  rows={4}
-                  value={promoted.data}
-                  onChange={(e) => setPromoted({ ...promoted, data: e.target.value })}
+                <span className="text-xs text-slate-400">URL</span>
+                <Input
+                  className="font-mono"
+                  value={promoted.url}
+                  onChange={(e) => setPromoted({ ...promoted, url: e.target.value })}
+                  placeholder="http://…"
                 />
+              </div>
+              <div className="space-y-1">
+                <div className="flex items-center">
+                  <span className="text-xs text-slate-400">Data (JSON)</span>
+                  <div className="flex-1" />
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-6 px-2 text-xs"
+                    onClick={formatData}
+                    title="Format JSON"
+                  >
+                    <Braces className="h-3.5 w-3.5" />
+                    <span className="ml-1">Format</span>
+                  </Button>
+                </div>
+                <JsonEditor
+                  value={promoted.data}
+                  onChange={(v) => {
+                    setPromoted({ ...promoted, data: v });
+                    setJsonError(null);
+                  }}
+                />
+                {jsonError && <p className="text-xs text-red-600">Invalid JSON: {jsonError}</p>}
               </div>
             </div>
           )}

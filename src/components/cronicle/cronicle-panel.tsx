@@ -673,7 +673,15 @@ export function CroniclePanel({ clusterId, clusterName, config }: CroniclePanelP
                           title={`Select ${event.title}`}
                         />
                       </TableCell>
-                      <TableCell className="font-medium">{event.title}</TableCell>
+                      <TableCell className="font-medium">
+                        <button
+                          className="text-left hover:text-blue-600 hover:underline"
+                          onClick={() => setEditEvent(event)}
+                          title="Edit event"
+                        >
+                          {event.title}
+                        </button>
+                      </TableCell>
                       <TableCell className="text-xs text-slate-500 font-mono">
                         {formatTiming(event.timing)}
                       </TableCell>
