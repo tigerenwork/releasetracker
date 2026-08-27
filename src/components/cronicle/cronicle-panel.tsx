@@ -715,8 +715,8 @@ export function CroniclePanel({ clusterId, clusterName, config }: CroniclePanelP
               <CalendarClock className="h-4 w-4" />
               Scheduled Events ({filteredEvents.length})
             </h3>
-            <div className="rounded-md border">
-              <Table>
+            <div className="rounded-md border overflow-x-auto">
+              <Table className="min-w-[640px]">
                 <TableHeader>
                   <TableRow>
                     <TableHead className="w-10">
@@ -761,12 +761,12 @@ export function CroniclePanel({ clusterId, clusterName, config }: CroniclePanelP
                           title={`Select ${event.title}`}
                         />
                       </TableCell>
-                      <TableCell className="font-medium">
-                        <div className="flex items-center gap-2">
+                      <TableCell className="font-medium min-w-[220px]">
+                        <div className="flex items-start gap-2 min-w-0">
                           <Button
                             variant="ghost"
                             size="sm"
-                            className="h-6 px-1.5"
+                            className="h-6 px-1.5 shrink-0"
                             onClick={() => toggleEnabled(event)}
                             disabled={togglingId === event.id}
                             title={event.enabled ? 'Enabled — click to disable' : 'Disabled — click to enable'}
@@ -781,7 +781,7 @@ export function CroniclePanel({ clusterId, clusterName, config }: CroniclePanelP
                               />
                             )}
                             <span
-                              className={`ml-1.5 text-xs font-normal ${
+                              className={`ml-1.5 text-xs font-normal hidden lg:inline ${
                                 event.enabled ? 'text-green-700' : 'text-slate-400'
                               }`}
                             >
@@ -789,24 +789,24 @@ export function CroniclePanel({ clusterId, clusterName, config }: CroniclePanelP
                             </span>
                           </Button>
                           <button
-                            className="text-left hover:text-blue-600 hover:underline"
+                            className="min-w-0 break-all text-left hover:text-blue-600 hover:underline"
                             onClick={() => setEditEvent(event)}
-                            title="Edit event"
+                            title={`${event.title} — click to edit`}
                           >
                             {event.title}
                           </button>
                         </div>
                       </TableCell>
                       <TableCell
-                        className="text-xs text-slate-500"
+                        className="text-xs text-slate-500 whitespace-nowrap"
                         title={formatTiming(event.timing)}
                       >
                         {summarizeTiming(event.timing)}
                       </TableCell>
-                      <TableCell className="text-sm text-slate-500">
+                      <TableCell className="text-sm text-slate-500 whitespace-nowrap">
                         {categoryTitle(event.category)}
                       </TableCell>
-                      <TableCell>
+                      <TableCell className="whitespace-nowrap">
                         <div className="flex items-center gap-1">
                           <Button
                             variant="outline"
