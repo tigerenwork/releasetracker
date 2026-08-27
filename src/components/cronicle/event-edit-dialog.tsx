@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
 import {
   Dialog,
   DialogContent,
@@ -18,8 +19,14 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Loader2, Plus, X } from 'lucide-react';
-import { updateEvent } from '@/lib/cronicle/client';
+import { updateEvent, type EventUpdate } from '@/lib/cronicle/client';
 import type { CronicleCategory, CronicleConfig, CronicleEvent } from '@/lib/cronicle/types';
+import {
+  TimingEditor,
+  buildTiming,
+  normalizeTiming,
+  type TimingValue,
+} from '@/components/cronicle/timing-editor';
 
 interface EventEditDialogProps {
   clusterName: string;
@@ -40,7 +47,11 @@ const TIMING_FIELDS = [
   { key: 'weekdays', label: 'Weekdays (0=Sun)', min: 0, max: 6 },
 ] as const;
 
-type TimingKey = (typeof TIMING_FIELDS)[number]['key'];
+type RawTimingKey = (typeof TIMING_FIELDS)[number]['key'];
+
+/** Plugin params promoted to a dedicated "Request" section (HTTP-style plugins) */
+const PROMOTED_PARAMS = ['method', 'url', 'data'] as const;
+type PromotedKey = (typeof PROMOTED_PARAMS)[number];
 
 interface ParamRow {
   key: string;
@@ -64,6 +75,16 @@ function parseNumList(raw: string, min: number, max: number, label: string): num
   return [...new Set(values)].sort((a, b) => a - b);
 }
 
+function rawTimingFromEvent(event: CronicleEvent): Record<RawTimingKey, string> {
+  return {
+    minutes: formatNumList(event.timing?.minutes),
+    hours: formatNumList(event.timing?.hours),
+    days: formatNumList(event.timing?.days),
+    months: formatNumList(event.timing?.months),
+    weekdays: formatNumList(event.timing?.weekdays),
+  };
+}
+
 /**
  * Edit a Cronicle event: title, category, timing and plugin params.
  * `update_event` replaces timing/params wholesale when sent, so the form is
@@ -80,14 +101,25 @@ export function EventEditDialog({
 }: EventEditDialogProps) {
   const [title, setTitle] = useState(event.title);
   const [category, setCategory] = useState(event.category);
-  const [timing, setTiming] = useState<Record<TimingKey, string>>({
-    minutes: formatNumList(event.timing?.minutes),
-    hours: formatNumList(event.timing?.hours),
-    days: formatNumList(event.timing?.days),
-    months: formatNumList(event.timing?.months),
-    weekdays: formatNumList(event.timing?.weekdays),
+
+  // Timing: visual (Cronicle-native) editor by default, raw lists on toggle
+  const [timingMode, setTimingMode] = useState<'visual' | 'raw'>('visual');
+  const [timingValue, setTimingValue] = useState<TimingValue>(() =>
+    normalizeTiming(event.timing)
+  );
+  const [rawTiming, setRawTiming] = useState<Record<RawTimingKey, string>>(() =>
+    rawTimingFromEvent(event)
+  );
+
+  // Promoted request params (method/url/data) get dedicated full-width fields
+  const [promoted, setPromoted] = useState<Record<PromotedKey, string>>({
+    method: '',
+    url: '',
+    data: '',
   });
+  const [promotedPresent, setPromotedPresent] = useState<Set<PromotedKey>>(new Set());
   const [params, setParams] = useState<ParamRow[]>([]);
+
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -96,56 +128,94 @@ export function EventEditDialog({
     if (!open) return;
     setTitle(event.title);
     setCategory(event.category);
-    setTiming({
-      minutes: formatNumList(event.timing?.minutes),
-      hours: formatNumList(event.timing?.hours),
-      days: formatNumList(event.timing?.days),
-      months: formatNumList(event.timing?.months),
-      weekdays: formatNumList(event.timing?.weekdays),
-    });
-    setParams(
-      Object.entries(event.params ?? {}).map(([key, value]) => ({
-        key,
-        value: String(value),
-      }))
-    );
+    setTimingMode('visual');
+    setTimingValue(normalizeTiming(event.timing));
+    setRawTiming(rawTimingFromEvent(event));
+
+    const present = new Set<PromotedKey>();
+    const promotedValues = { method: '', url: '', data: '' };
+    const rest: ParamRow[] = [];
+    for (const [key, value] of Object.entries(event.params ?? {})) {
+      if ((PROMOTED_PARAMS as readonly string[]).includes(key)) {
+        present.add(key as PromotedKey);
+        promotedValues[key as PromotedKey] = String(value);
+      } else {
+        rest.push({ key, value: String(value) });
+      }
+    }
+    setPromotedPresent(present);
+    setPromoted(promotedValues);
+    setParams(rest);
     setError(null);
   }, [open, event]);
+
+  const switchTimingMode = (next: 'visual' | 'raw') => {
+    if (next === timingMode) return;
+    if (next === 'raw') {
+      // Visual → raw: render the current selection as comma-separated lists
+      setRawTiming({
+        minutes: timingValue === false ? '' : formatNumList(timingValue.minutes),
+        hours: timingValue === false ? '' : formatNumList(timingValue.hours),
+        days: timingValue === false ? '' : formatNumList(timingValue.days),
+        months: timingValue === false ? '' : formatNumList(timingValue.months),
+        weekdays: timingValue === false ? '' : formatNumList(timingValue.weekdays),
+      });
+      setError(null);
+      setTimingMode('raw');
+    } else {
+      // Raw → visual: the raw lists must parse cleanly first
+      try {
+        const parsed = {} as Record<RawTimingKey, number[]>;
+        for (const field of TIMING_FIELDS) {
+          parsed[field.key] = parseNumList(rawTiming[field.key], field.min, field.max, field.label);
+        }
+        const allEmpty = TIMING_FIELDS.every((f) => parsed[f.key].length === 0);
+        setTimingValue(allEmpty ? false : { years: [], ...parsed });
+        setError(null);
+        setTimingMode('visual');
+      } catch (err) {
+        setError(err instanceof Error ? err.message : String(err));
+      }
+    }
+  };
 
   const save = async () => {
     if (saving) return;
     setSaving(true);
     setError(null);
     try {
-      const parsed = {} as Record<TimingKey, number[]>;
-      for (const field of TIMING_FIELDS) {
-        parsed[field.key] = parseNumList(timing[field.key], field.min, field.max, field.label);
+      const updates: EventUpdate = { title: title.trim(), category };
+
+      if (timingMode === 'visual') {
+        updates.timing = buildTiming(timingValue);
+      } else {
+        const parsed = {} as Record<RawTimingKey, number[]>;
+        for (const field of TIMING_FIELDS) {
+          parsed[field.key] = parseNumList(rawTiming[field.key], field.min, field.max, field.label);
+        }
+        // Only send timing when at least one field is set — omitting it
+        // preserves the existing timing on the Cronicle side
+        if (TIMING_FIELDS.some((f) => parsed[f.key].length > 0)) {
+          updates.timing = Object.fromEntries(
+            TIMING_FIELDS.filter((f) => parsed[f.key].length > 0).map((f) => [f.key, parsed[f.key]])
+          );
+        }
       }
-      // Only send timing when at least one field is set — omitting it
-      // preserves the existing timing on the Cronicle side
-      const hasTiming = TIMING_FIELDS.some((f) => parsed[f.key].length > 0);
 
       const paramObj: Record<string, string> = {};
       for (const row of params) {
         const key = row.key.trim();
         if (key) paramObj[key] = row.value;
       }
+      // Promoted params: keep them if they were already on the event, or were filled in
+      for (const key of PROMOTED_PARAMS) {
+        if (promotedPresent.has(key) || promoted[key].trim()) {
+          paramObj[key] = promoted[key];
+        }
+      }
+      updates.params = paramObj;
 
-      await updateEvent(clusterName, config, event.id, {
-        title: title.trim(),
-        category,
-        ...(hasTiming
-          ? {
-              timing: Object.fromEntries(
-                TIMING_FIELDS.filter((f) => parsed[f.key].length > 0).map((f) => [
-                  f.key,
-                  parsed[f.key],
-                ])
-              ),
-            }
-          : {}),
-        params: paramObj,
-      });
+      await updateEvent(clusterName, config, event.id, updates);
       onOpenChange(false);
       onSaved();
     } catch (err) {
@@ -155,57 +225,129 @@ export function EventEditDialog({
     }
   };
 
+  const showRequestSection = promotedPresent.size > 0;
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl">
+      <DialogContent className="max-w-3xl max-h-[85vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Edit Event</DialogTitle>
         </DialogHeader>
         <div className="space-y-4">
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label htmlFor="ee-title">Title</Label>
-              <Input
-                id="ee-title"
-                value={title}
-                onChange={(e) => setTitle(e.target.value)}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label>Category</Label>
-              <Select value={category} onValueChange={setCategory}>
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {categories.map((c) => (
-                    <SelectItem key={c.id} value={c.id}>
-                      {c.title}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
+          <div className="space-y-2">
+            <Label htmlFor="ee-title">Title</Label>
+            <Input
+              id="ee-title"
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+            />
           </div>
 
           <div className="space-y-2">
-            <Label>Timing</Label>
-            <div className="grid grid-cols-5 gap-2">
-              {TIMING_FIELDS.map((field) => (
-                <div key={field.key} className="space-y-1">
-                  <span className="text-xs text-slate-400">{field.label}</span>
+            <Label>Category</Label>
+            <Select value={category} onValueChange={setCategory}>
+              <SelectTrigger className="w-64">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {categories.map((c) => (
+                  <SelectItem key={c.id} value={c.id}>
+                    {c.title}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          {showRequestSection && (
+            <div className="space-y-3 rounded-md border p-3">
+              <Label>Request</Label>
+              <div className="flex items-center gap-2">
+                <div className="space-y-1">
+                  <span className="text-xs text-slate-400">Method</span>
                   <Input
-                    value={timing[field.key]}
-                    onChange={(e) => setTiming({ ...timing, [field.key]: e.target.value })}
-                    placeholder="*"
+                    className="w-28"
+                    value={promoted.method}
+                    onChange={(e) => setPromoted({ ...promoted, method: e.target.value })}
+                    placeholder="POST"
                   />
                 </div>
-              ))}
+                <div className="space-y-1 flex-1">
+                  <span className="text-xs text-slate-400">URL</span>
+                  <Input
+                    className="font-mono"
+                    value={promoted.url}
+                    onChange={(e) => setPromoted({ ...promoted, url: e.target.value })}
+                    placeholder="http://…"
+                  />
+                </div>
+              </div>
+              <div className="space-y-1">
+                <span className="text-xs text-slate-400">Data</span>
+                <Textarea
+                  className="font-mono text-xs"
+                  rows={4}
+                  value={promoted.data}
+                  onChange={(e) => setPromoted({ ...promoted, data: e.target.value })}
+                />
+              </div>
             </div>
-            <p className="text-xs text-slate-400">
-              Comma-separated numbers; empty means &quot;every&quot;. All fields empty keeps the
-              current timing unchanged.
-            </p>
+          )}
+
+          <div className="space-y-2">
+            <div className="flex items-center gap-2">
+              <Label>Timing</Label>
+              <div className="flex-1" />
+              <div className="flex rounded-md border text-xs overflow-hidden">
+                <button
+                  type="button"
+                  className={`px-2 py-1 ${
+                    timingMode === 'visual'
+                      ? 'bg-slate-900 text-white'
+                      : 'bg-white text-slate-600 hover:bg-slate-50'
+                  }`}
+                  onClick={() => switchTimingMode('visual')}
+                >
+                  Visual
+                </button>
+                <button
+                  type="button"
+                  className={`px-2 py-1 ${
+                    timingMode === 'raw'
+                      ? 'bg-slate-900 text-white'
+                      : 'bg-white text-slate-600 hover:bg-slate-50'
+                  }`}
+                  onClick={() => switchTimingMode('raw')}
+                >
+                  Raw lists
+                </button>
+              </div>
+            </div>
+
+            {timingMode === 'visual' ? (
+              <TimingEditor value={timingValue} onChange={setTimingValue} />
+            ) : (
+              <>
+                <div className="grid grid-cols-5 gap-2">
+                  {TIMING_FIELDS.map((field) => (
+                    <div key={field.key} className="space-y-1">
+                      <span className="text-xs text-slate-400">{field.label}</span>
+                      <Input
+                        value={rawTiming[field.key]}
+                        onChange={(e) =>
+                          setRawTiming({ ...rawTiming, [field.key]: e.target.value })
+                        }
+                        placeholder="*"
+                      />
+                    </div>
+                  ))}
+                </div>
+                <p className="text-xs text-slate-400">
+                  Comma-separated numbers; empty means &quot;every&quot;. All fields empty keeps
+                  the current timing unchanged.
+                </p>
+              </>
+            )}
           </div>
 
           <div className="space-y-2">

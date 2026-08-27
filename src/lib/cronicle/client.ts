@@ -186,8 +186,8 @@ export interface EventUpdate {
   enabled?: 0 | 1;
   title?: string;
   category?: string;
-  /** Replaced wholesale when sent; omit to preserve the existing timing */
-  timing?: CronicleEvent['timing'];
+  /** Replaced wholesale when sent; omit to preserve the existing timing. `false` = on demand */
+  timing?: CronicleEvent['timing'] | false;
   /** Replaced wholesale when sent; omit to preserve the existing params */
   params?: Record<string, string>;
 }
