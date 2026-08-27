@@ -63,6 +63,7 @@ import type {
   CronicleJob,
 } from '@/lib/cronicle/types';
 import { EventEditDialog } from '@/components/cronicle/event-edit-dialog';
+import { summarizeTiming } from '@/components/cronicle/timing-editor';
 import { updateClusterCronicleConfig } from '@/lib/actions/clusters';
 
 const ALL_CATEGORIES = '__all__';
@@ -650,14 +651,13 @@ export function CroniclePanel({ clusterId, clusterName, config }: CroniclePanelP
                     <TableHead>Event</TableHead>
                     <TableHead>Timing</TableHead>
                     <TableHead>Category</TableHead>
-                    <TableHead>Status</TableHead>
                     <TableHead className="w-32"></TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {filteredEvents.length === 0 && (
                     <TableRow>
-                      <TableCell colSpan={6} className="text-center text-slate-400">
+                      <TableCell colSpan={5} className="text-center text-slate-400">
                         {loading ? 'Loading…' : 'No events in this category.'}
                       </TableCell>
                     </TableRow>
@@ -674,46 +674,49 @@ export function CroniclePanel({ clusterId, clusterName, config }: CroniclePanelP
                         />
                       </TableCell>
                       <TableCell className="font-medium">
-                        <button
-                          className="text-left hover:text-blue-600 hover:underline"
-                          onClick={() => setEditEvent(event)}
-                          title="Edit event"
-                        >
-                          {event.title}
-                        </button>
+                        <div className="flex items-center gap-2">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-6 px-1.5"
+                            onClick={() => toggleEnabled(event)}
+                            disabled={togglingId === event.id}
+                            title={event.enabled ? 'Enabled — click to disable' : 'Disabled — click to enable'}
+                          >
+                            {togglingId === event.id ? (
+                              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                            ) : (
+                              <span
+                                className={`h-2 w-2 rounded-full ${
+                                  event.enabled ? 'bg-green-500' : 'bg-slate-300'
+                                }`}
+                              />
+                            )}
+                            <span
+                              className={`ml-1.5 text-xs font-normal ${
+                                event.enabled ? 'text-green-700' : 'text-slate-400'
+                              }`}
+                            >
+                              {event.enabled ? 'Enabled' : 'Disabled'}
+                            </span>
+                          </Button>
+                          <button
+                            className="text-left hover:text-blue-600 hover:underline"
+                            onClick={() => setEditEvent(event)}
+                            title="Edit event"
+                          >
+                            {event.title}
+                          </button>
+                        </div>
                       </TableCell>
-                      <TableCell className="text-xs text-slate-500 font-mono">
-                        {formatTiming(event.timing)}
+                      <TableCell
+                        className="text-xs text-slate-500"
+                        title={formatTiming(event.timing)}
+                      >
+                        {summarizeTiming(event.timing)}
                       </TableCell>
                       <TableCell className="text-sm text-slate-500">
                         {categoryTitle(event.category)}
-                      </TableCell>
-                      <TableCell>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="px-2"
-                          onClick={() => toggleEnabled(event)}
-                          disabled={togglingId === event.id}
-                          title={event.enabled ? 'Click to disable' : 'Click to enable'}
-                        >
-                          {togglingId === event.id ? (
-                            <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                          ) : (
-                            <span
-                              className={`h-2 w-2 rounded-full ${
-                                event.enabled ? 'bg-green-500' : 'bg-slate-300'
-                              }`}
-                            />
-                          )}
-                          <span
-                            className={`ml-2 text-xs ${
-                              event.enabled ? 'text-green-700' : 'text-slate-500'
-                            }`}
-                          >
-                            {event.enabled ? 'Enabled' : 'Disabled'}
-                          </span>
-                        </Button>
                       </TableCell>
                       <TableCell>
                         <div className="flex items-center gap-1">

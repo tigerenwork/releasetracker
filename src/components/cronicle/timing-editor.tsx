@@ -147,9 +147,15 @@ function summarize(value: TimingValue, preset: Preset): string {
     return prefix + joinList(shown) + suffix;
   };
 
+  const minuteList = (cap: number) => {
+    const mins = value.minutes.map((m) => `:${String(m).padStart(2, '0')}`);
+    const shown = mins.slice(0, cap);
+    return joinList(shown) + (mins.length > cap ? ` (+${mins.length - cap} more)` : '');
+  };
+
   switch (preset) {
     case 'hourly':
-      return `Hourly, at ${value.minutes.length ? joinList(value.minutes.map((m) => `:${String(m).padStart(2, '0')}`)) : 'every minute'} past the hour`;
+      return `Hourly, at ${value.minutes.length ? minuteList(6) : 'every minute'} past the hour`;
     case 'daily':
       return `Daily at ${times()}`;
     case 'weekly':
@@ -161,6 +167,12 @@ function summarize(value: TimingValue, preset: Preset): string {
     case 'custom':
       return 'Custom schedule';
   }
+}
+
+/** Human-readable schedule summary for an API timing object, e.g. "Daily at 6:45am" */
+export function summarizeTiming(timing?: CronicleEvent['timing'] | false | null): string {
+  const value = normalizeTiming(timing);
+  return summarize(value, detectPreset(value));
 }
 
 function Chip({
