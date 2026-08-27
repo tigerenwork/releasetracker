@@ -18,6 +18,7 @@ import {
   type AgentStatus,
   type PortForwardInfo,
 } from '@/lib/services/agent-bridge';
+import { DEFAULT_CRONICLE_CONFIG } from '@/lib/cronicle/client';
 
 interface PortForwardPanelProps {
   clusterName: string;
@@ -26,10 +27,10 @@ interface PortForwardPanelProps {
 }
 
 const DEFAULTS = {
-  namespace: 'cronicle',
-  resource: 'service/cronicle',
-  localPort: '3012',
-  remotePort: '3012',
+  namespace: DEFAULT_CRONICLE_CONFIG.namespace,
+  resource: DEFAULT_CRONICLE_CONFIG.resource,
+  localPort: String(DEFAULT_CRONICLE_CONFIG.localPort),
+  remotePort: String(DEFAULT_CRONICLE_CONFIG.remotePort),
 };
 
 /**

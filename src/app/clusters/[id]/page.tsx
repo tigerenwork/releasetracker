@@ -1,10 +1,13 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
-import { ArrowLeft, Cable, Server, Users } from 'lucide-react';
+import { ArrowLeft, Cable, CalendarClock, Server, Users } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { getClusterWithCustomers } from '@/lib/actions/clusters';
 import { PortForwardPanel } from '@/components/pods/port-forward-panel';
+import { CroniclePanel } from '@/components/cronicle/cronicle-panel';
+import { DEFAULT_CRONICLE_CONFIG } from '@/lib/cronicle/client';
+import type { CronicleConfig } from '@/lib/cronicle/types';
 
 interface ClusterDetailPageProps {
   params: Promise<{
@@ -109,6 +112,25 @@ export default async function ClusterDetailPage({ params }: ClusterDetailPagePro
         </CardHeader>
         <CardContent>
           <PortForwardPanel clusterName={cluster.name} />
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <CalendarClock className="w-5 h-5" />
+            Cronicle
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <CroniclePanel
+            clusterId={cluster.id}
+            clusterName={cluster.name}
+            config={{
+              ...DEFAULT_CRONICLE_CONFIG,
+              ...(cluster.metadata?.cronicle as Partial<CronicleConfig> | undefined),
+            }}
+          />
         </CardContent>
       </Card>
     </div>

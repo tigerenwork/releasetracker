@@ -63,6 +63,37 @@ export async function getClusterById(id: number) {
   });
 }
 
+/**
+ * Merge Cronicle connection settings into the cluster's metadata JSON.
+ * `apiKey` is stored server-side in SQLite and only sent to the browser
+ * as part of the cluster detail payload (needed to call the Cronicle API).
+ */
+export async function updateClusterCronicleConfig(
+  id: number,
+  cronicle: {
+    namespace: string;
+    resource: string;
+    localPort: number;
+    remotePort: number;
+    apiKey?: string;
+    categoryId?: string;
+  }
+) {
+  const cluster = await getClusterById(id);
+  if (!cluster) {
+    throw new Error(`Cluster not found: ${id}`);
+  }
+
+  const metadata = { ...(cluster.metadata ?? {}), cronicle };
+  const [updated] = await db
+    .update(clusters)
+    .set({ metadata, updatedAt: new Date() })
+    .where(eq(clusters.id, id))
+    .returning();
+  revalidatePath(`/clusters/${id}`);
+  return updated;
+}
+
 export async function getClusterWithCustomers(id: number) {
   return db.query.clusters.findFirst({
     where: eq(clusters.id, id),

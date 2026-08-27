@@ -96,6 +96,31 @@ window.addEventListener('message', async (event) => {
       break;
     }
 
+    case 'RT_PROXY_REQUEST': {
+      try {
+        const result = await chrome.runtime.sendMessage({
+          action: 'proxyRequest',
+          params: event.data.payload
+        });
+
+        window.postMessage({
+          type: 'RT_PROXY_RESPONSE',
+          id: event.data.id,
+          success: result.success,
+          result: result.data,
+          error: result.error
+        }, '*');
+      } catch (err) {
+        window.postMessage({
+          type: 'RT_PROXY_RESPONSE',
+          id: event.data.id,
+          success: false,
+          error: err.message
+        }, '*');
+      }
+      break;
+    }
+
     case 'RT_EXECUTE_STREAM': {
       const port = chrome.runtime.connect({ name: 'rt-stream' });
       streamPorts.set(event.data.id, port);

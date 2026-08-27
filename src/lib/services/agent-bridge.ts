@@ -103,6 +103,21 @@ export interface PortForwardInfo {
   error?: string;
 }
 
+export interface ProxyRequest {
+  /** Loopback URL only (http://127.0.0.1:* or http://localhost:*) */
+  url: string;
+  method?: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
+  headers?: Record<string, string>;
+  body?: string;
+  /** Per-request timeout in ms (default 30000) */
+  timeoutMs?: number;
+}
+
+export interface ProxyResponse {
+  status: number;
+  body: string;
+}
+
 export interface ExecutionRequest {
   id: string;
   type: 'sql' | 'rest' | 'script' | 'pods' | 'logs' | 'restart' | 'config';
@@ -255,6 +270,11 @@ export function supportsRestart(version?: string): boolean {
 /** True when the connected agent supports ConfigMap view/edit */
 export function supportsConfigEdit(version?: string): boolean {
   return !!version && compareVersions(version, CONFIG_EDIT_MIN_VERSION) >= 0;
+}
+
+/** True when the loaded extension exposes the loopback HTTP proxy relay */
+export function supportsProxyRequest(): boolean {
+  return typeof window !== 'undefined' && typeof window.rtAgent?.proxyRequest === 'function';
 }
 
 class AgentBridge {
@@ -616,6 +636,17 @@ class AgentBridge {
     return (result as { forwards: PortForwardInfo[] }).forwards;
   }
 
+  /**
+   * Proxy an HTTP request to a loopback service (e.g. a port-forward)
+   * via the extension's background worker. Requires extension >= 1.1.0.
+   */
+  async proxyRequest(request: ProxyRequest): Promise<ProxyResponse> {
+    if (!this.isAvailable() || typeof window.rtAgent!.proxyRequest !== 'function') {
+      throw new Error('Agent extension does not support proxy requests — reload the extension');
+    }
+    return window.rtAgent!.proxyRequest(request) as Promise<ProxyResponse>;
+  }
+
   destroy() {
     if (this.checkInterval) {
       clearInterval(this.checkInterval);
@@ -641,6 +672,7 @@ declare global {
       portForward(op: 'start', params: PortForwardRequest): Promise<unknown>;
       portForward(op: 'stop', params: { id: string }): Promise<unknown>;
       portForward(op: 'list', params?: Record<string, never>): Promise<unknown>;
+      proxyRequest?(params: ProxyRequest): Promise<unknown>;
       getStatus(): Promise<{ connected: boolean; version?: string; agentUrl?: string }>;
       ping(): Promise<ExecutionResult>;
     };

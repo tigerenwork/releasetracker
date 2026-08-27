@@ -202,7 +202,10 @@ async function handleMessage(request) {
 
     case 'portforward':
       return await portForwardCommand(request.op, request.params);
-      
+
+    case 'proxyRequest':
+      return await proxyRequestCommand(request.params);
+
     case 'updateSettings':
       connectionState.agentUrl = request.agentUrl || connectionState.agentUrl;
       connectionState.token = request.token || connectionState.token;
@@ -355,6 +358,56 @@ async function portForwardCommand(op, params) {
 
   const data = await response.json();
   return { success: true, data };
+}
+
+/**
+ * Generic HTTP proxy to a service reachable from the user's machine
+ * (e.g. a kubectl port-forward on 127.0.0.1). Runs in the service worker,
+ * so host_permissions bypass CORS. Restricted to loopback URLs so the page
+ * cannot use the extension as an open proxy.
+ */
+async function proxyRequestCommand(params) {
+  await ensureSettings();
+
+  const url = new URL(params.url);
+  const isLoopback =
+    url.protocol === 'http:' && (url.hostname === '127.0.0.1' || url.hostname === 'localhost');
+  if (!isLoopback) {
+    throw new Error('Proxy requests are restricted to http://127.0.0.1 / http://localhost URLs');
+  }
+
+  const controller = new AbortController();
+  const timeoutMs = params.timeoutMs || 30000;
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+
+  try {
+    const response = await fetch(url.toString(), {
+      method: params.method || 'GET',
+      headers: params.headers || {},
+      body: params.body !== undefined ? params.body : undefined,
+      signal: controller.signal
+    });
+
+    // Guard against unexpectedly large bodies (e.g. huge job logs)
+    const MAX_BODY = 10 * 1024 * 1024;
+    const declared = parseInt(response.headers.get('content-length') || '0', 10);
+    if (declared > MAX_BODY) {
+      throw new Error(`Proxy response too large (${declared} bytes)`);
+    }
+    const body = await response.text();
+    if (body.length > MAX_BODY) {
+      throw new Error(`Proxy response too large (${body.length} bytes)`);
+    }
+
+    return { success: true, data: { status: response.status, body } };
+  } catch (err) {
+    if (err.name === 'AbortError') {
+      throw new Error(`Proxy request timed out after ${timeoutMs}ms`);
+    }
+    throw err;
+  } finally {
+    clearTimeout(timeoutId);
+  }
 }
 
 // Periodic connection check (every 30 seconds)

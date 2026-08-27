@@ -306,6 +306,46 @@
       },
 
       /**
+       * Generic HTTP proxy to a loopback service (e.g. a kubectl port-forward).
+       * params: { url, method?, headers?, body?, timeoutMs? }
+       * Resolves to { status, body } (body as text).
+       */
+      async proxyRequest(params) {
+        return new Promise((resolve, reject) => {
+          const id = generateId();
+          const timeout = setTimeout(() => {
+            pendingRequests.delete(id);
+            reject(new Error('Proxy request timeout'));
+          }, (params.timeoutMs || 30000) + 5000);
+
+          const handler = (event) => {
+            if (event.source !== window) return;
+            if (event.data?.type !== 'RT_PROXY_RESPONSE') return;
+            if (event.data.id !== id) return;
+
+            clearTimeout(timeout);
+            window.removeEventListener('message', handler);
+            pendingRequests.delete(id);
+
+            if (event.data.success) {
+              resolve(event.data.result);
+            } else {
+              reject(new Error(event.data.error || 'Proxy request failed'));
+            }
+          };
+
+          window.addEventListener('message', handler);
+          pendingRequests.set(id, { handler, timeout });
+
+          window.postMessage({
+            type: 'RT_PROXY_REQUEST',
+            id: id,
+            payload: params
+          }, '*');
+        });
+      },
+
+      /**
        * Simple ping to test connectivity
        */
       async ping() {
