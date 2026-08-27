@@ -9,6 +9,7 @@ import {
   Package, 
   Container,
   Workflow,
+  CalendarClock,
   Download,
   ChevronRight 
 } from 'lucide-react';
@@ -20,6 +21,7 @@ const navItems = [
   { href: '/customers', label: 'Customers', icon: Users },
   { href: '/releases', label: 'Releases', icon: Package },
   { href: '/pods', label: 'Pods', icon: Container },
+  { href: '/cronicle', label: 'Cronicle', icon: CalendarClock },
   { href: '/jenkins', label: 'Jenkins', icon: Workflow },
   { href: '/setup', label: 'Setup', icon: Download },
 ];

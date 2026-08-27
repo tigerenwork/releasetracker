@@ -39,6 +39,9 @@ export interface CronicleEvent {
     years?: number[];
   };
   params?: Record<string, string>;
+  timeout?: number;
+  retries?: number;
+  notes?: string;
 }
 
 export interface CronicleJob {

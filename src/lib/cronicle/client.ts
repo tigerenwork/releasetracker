@@ -182,6 +182,29 @@ export function abortJob(
   return apiCall(clusterName, config, 'abort_job', { id });
 }
 
+export interface EventUpdate {
+  enabled?: 0 | 1;
+  title?: string;
+  category?: string;
+  /** Replaced wholesale when sent; omit to preserve the existing timing */
+  timing?: CronicleEvent['timing'];
+  /** Replaced wholesale when sent; omit to preserve the existing params */
+  params?: Record<string, string>;
+}
+
+/**
+ * Update an existing scheduled event (requires the `edit_events` privilege).
+ * Omitted fields are preserved by Cronicle.
+ */
+export function updateEvent(
+  clusterName: string,
+  config: CronicleConfig,
+  id: string,
+  updates: EventUpdate
+): Promise<CronicleOkResponse> {
+  return apiCall(clusterName, config, 'update_event', { id, ...updates });
+}
+
 export function getHistory(
   clusterName: string,
   config: CronicleConfig,
