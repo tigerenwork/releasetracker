@@ -208,9 +208,23 @@ export function updateEvent(
 export function getHistory(
   clusterName: string,
   config: CronicleConfig,
-  limit = 50
+  limit = 50,
+  offset = 0
 ): Promise<CronicleListResponse<CronicleHistoryRow>> {
-  return apiCall(clusterName, config, 'get_history', { offset: 0, limit });
+  return apiCall(clusterName, config, 'get_history', { offset, limit });
+}
+
+/**
+ * Completed jobs for a single event, latest first (paginated).
+ */
+export function getEventHistory(
+  clusterName: string,
+  config: CronicleConfig,
+  id: string,
+  offset = 0,
+  limit = 20
+): Promise<CronicleListResponse<CronicleHistoryRow>> {
+  return apiCall(clusterName, config, 'get_event_history', { id, offset, limit });
 }
 
 /**

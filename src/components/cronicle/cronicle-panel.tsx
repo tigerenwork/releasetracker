@@ -48,6 +48,7 @@ import {
   abortJob,
   getActiveJobs,
   getCategories,
+  getEventHistory,
   getHistory,
   getJobLog,
   getJobStatus,
@@ -116,9 +117,18 @@ export function CroniclePanel({ clusterId, clusterName, config }: CroniclePanelP
   const [events, setEvents] = useState<CronicleEvent[]>([]);
   const [activeJobs, setActiveJobs] = useState<CronicleJob[]>([]);
   const [history, setHistory] = useState<CronicleHistoryRow[]>([]);
+  const [historyTotal, setHistoryTotal] = useState(0);
+  const [historyLoadingMore, setHistoryLoadingMore] = useState(false);
   const [selectedCategory, setSelectedCategoryState] = useState<string>(
     config.categoryId || ALL_CATEGORIES
   );
+
+  // Per-event history dialog
+  const [eventHistoryFor, setEventHistoryFor] = useState<{ id: string; title: string } | null>(null);
+  const [eventHistoryRows, setEventHistoryRows] = useState<CronicleHistoryRow[]>([]);
+  const [eventHistoryTotal, setEventHistoryTotal] = useState(0);
+  const [eventHistoryLoading, setEventHistoryLoading] = useState(false);
+  const [eventHistoryError, setEventHistoryError] = useState<string | null>(null);
 
   const [loading, setLoading] = useState(false);
   const [dataError, setDataError] = useState<string | null>(null);
@@ -200,6 +210,7 @@ export function CroniclePanel({ clusterId, clusterName, config }: CroniclePanelP
       setEvents(schedule.rows);
       setActiveJobs(jobs);
       setHistory(hist.rows);
+      setHistoryTotal(hist.list.length);
     } catch (err) {
       setDataError(errMessage(err));
     } finally {
@@ -215,7 +226,10 @@ export function CroniclePanel({ clusterId, clusterName, config }: CroniclePanelP
         // A job disappeared from the active list → it finished; refresh history
         if (prev.length > jobs.length) {
           getHistory(clusterName, config, 50)
-            .then((hist) => setHistory(hist.rows))
+            .then((hist) => {
+              setHistory(hist.rows);
+              setHistoryTotal(hist.list.length);
+            })
             .catch(() => {});
         }
         return jobs;
@@ -372,6 +386,57 @@ export function CroniclePanel({ clusterId, clusterName, config }: CroniclePanelP
     await loadData();
   };
 
+  const loadMoreHistory = async () => {
+    if (historyLoadingMore) return;
+    setHistoryLoadingMore(true);
+    try {
+      const resp = await getHistory(clusterName, config, 50, history.length);
+      setHistory((prev) => [...prev, ...resp.rows]);
+      setHistoryTotal(resp.list.length);
+    } catch (err) {
+      setDataError(errMessage(err));
+    } finally {
+      setHistoryLoadingMore(false);
+    }
+  };
+
+  const openEventHistory = async (event: CronicleEvent) => {
+    setEventHistoryFor({ id: event.id, title: event.title });
+    setEventHistoryRows([]);
+    setEventHistoryTotal(0);
+    setEventHistoryError(null);
+    setEventHistoryLoading(true);
+    try {
+      const resp = await getEventHistory(clusterName, config, event.id, 0, 20);
+      setEventHistoryRows(resp.rows);
+      setEventHistoryTotal(resp.list.length);
+    } catch (err) {
+      setEventHistoryError(errMessage(err));
+    } finally {
+      setEventHistoryLoading(false);
+    }
+  };
+
+  const loadMoreEventHistory = async () => {
+    if (!eventHistoryFor || eventHistoryLoading) return;
+    setEventHistoryLoading(true);
+    try {
+      const resp = await getEventHistory(
+        clusterName,
+        config,
+        eventHistoryFor.id,
+        eventHistoryRows.length,
+        20
+      );
+      setEventHistoryRows((prev) => [...prev, ...resp.rows]);
+      setEventHistoryTotal(resp.list.length);
+    } catch (err) {
+      setEventHistoryError(errMessage(err));
+    } finally {
+      setEventHistoryLoading(false);
+    }
+  };
+
   const openLog = async (jobId: string) => {
     setLogJobId(jobId);
     setLogText(null);
@@ -437,8 +502,7 @@ export function CroniclePanel({ clusterId, clusterName, config }: CroniclePanelP
   );
   const filteredHistory = history
     .filter((h) => !h.action) // skip stub rows (e.g. deleted jobs)
-    .filter((h) => selectedCategory === ALL_CATEGORIES || h.category === selectedCategory)
-    .slice(0, 10);
+    .filter((h) => selectedCategory === ALL_CATEGORIES || h.category === selectedCategory);
 
   const allFilteredSelected =
     filteredEvents.length > 0 && filteredEvents.every((e) => selection.has(e.id));
@@ -446,6 +510,30 @@ export function CroniclePanel({ clusterId, clusterName, config }: CroniclePanelP
 
   const monitorComplete = !!monitorJob?.complete;
   const monitorSuccess = monitorComplete && monitorJob?.code === 0;
+
+  const renderHistoryRow = (row: CronicleHistoryRow) => (
+    <div key={row.id} className="flex items-center gap-3 px-3 py-2">
+      <div className="min-w-0 flex-1">
+        <button
+          className="text-sm font-medium truncate hover:text-blue-600 text-left"
+          onClick={() => openLog(row.id)}
+          title="View job log"
+        >
+          {row.event_title || row.event}
+        </button>
+        <div className="text-xs text-slate-400">
+          {new Date(row.time_start * 1000).toLocaleString()} · {formatElapsed(row.elapsed)}
+        </div>
+      </div>
+      {row.code === 0 ? (
+        <Badge className="bg-green-100 text-green-700 hover:bg-green-100">Success</Badge>
+      ) : (
+        <Badge className="bg-red-100 text-red-700 hover:bg-red-100" title={row.description}>
+          Failed
+        </Badge>
+      )}
+    </div>
+  );
 
   return (
     <div className="space-y-6">
@@ -737,6 +825,14 @@ export function CroniclePanel({ clusterId, clusterName, config }: CroniclePanelP
                           <Button
                             variant="ghost"
                             size="sm"
+                            onClick={() => openEventHistory(event)}
+                            title="Event history"
+                          >
+                            <History className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
                             onClick={() => setEditEvent(event)}
                             title="Edit event"
                           >
@@ -763,33 +859,21 @@ export function CroniclePanel({ clusterId, clusterName, config }: CroniclePanelP
                   No completed jobs yet.
                 </p>
               )}
-              {filteredHistory.map((row) => (
-                <div key={row.id} className="flex items-center gap-3 px-3 py-2">
-                  <div className="min-w-0 flex-1">
-                    <button
-                      className="text-sm font-medium truncate hover:text-blue-600 text-left"
-                      onClick={() => openLog(row.id)}
-                      title="View job log"
-                    >
-                      {row.event_title || row.event}
-                    </button>
-                    <div className="text-xs text-slate-400">
-                      {new Date(row.time_start * 1000).toLocaleString()} ·{' '}
-                      {formatElapsed(row.elapsed)}
-                    </div>
-                  </div>
-                  {row.code === 0 ? (
-                    <Badge className="bg-green-100 text-green-700 hover:bg-green-100">
-                      Success
-                    </Badge>
-                  ) : (
-                    <Badge className="bg-red-100 text-red-700 hover:bg-red-100" title={row.description}>
-                      Failed
-                    </Badge>
-                  )}
-                </div>
-              ))}
+              {filteredHistory.map(renderHistoryRow)}
             </div>
+            {history.length < historyTotal && (
+              <div className="flex justify-center">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={loadMoreHistory}
+                  disabled={historyLoadingMore}
+                >
+                  {historyLoadingMore && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
+                  Load more ({history.length} / {historyTotal})
+                </Button>
+              </div>
+            )}
           </section>
         </>
       )}
@@ -887,6 +971,49 @@ export function CroniclePanel({ clusterId, clusterName, config }: CroniclePanelP
               </>
             )}
           </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Per-event history dialog */}
+      <Dialog
+        open={!!eventHistoryFor}
+        onOpenChange={(open) => !open && setEventHistoryFor(null)}
+      >
+        <DialogContent className="max-w-[calc(100%-2rem)] sm:max-w-2xl max-h-[85vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>History — {eventHistoryFor?.title}</DialogTitle>
+          </DialogHeader>
+          {eventHistoryError && <p className="text-sm text-red-600">{eventHistoryError}</p>}
+          {!eventHistoryError && eventHistoryRows.length === 0 && (
+            <div className="flex items-center gap-2 text-sm text-slate-500">
+              {eventHistoryLoading ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Loading history…
+                </>
+              ) : (
+                'No completed jobs for this event yet.'
+              )}
+            </div>
+          )}
+          {eventHistoryRows.length > 0 && (
+            <div className="divide-y rounded-md border">
+              {eventHistoryRows.map(renderHistoryRow)}
+            </div>
+          )}
+          {eventHistoryRows.length < eventHistoryTotal && (
+            <div className="flex justify-center">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={loadMoreEventHistory}
+                disabled={eventHistoryLoading}
+              >
+                {eventHistoryLoading && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
+                Load more ({eventHistoryRows.length} / {eventHistoryTotal})
+              </Button>
+            </div>
+          )}
         </DialogContent>
       </Dialog>
 
