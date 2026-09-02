@@ -10,6 +10,7 @@ import { getReleaseStepsGroupedByCluster, getStepStats } from '@/lib/actions/cus
 import { listCustomers } from '@/lib/actions/customers';
 import { ReleaseMatrixClient } from '@/components/releases/release-matrix-client';
 import { ReleaseActions } from '@/components/releases/release-actions';
+import { ReleaseDescription } from '@/components/releases/release-description';
 import { AutoRunControls } from '@/components/releases/auto-run-controls';
 import { CustomerPodsSheet } from '@/components/pods/customer-pods-sheet';
 
@@ -164,7 +165,7 @@ export default async function ReleaseDetailPage({ params }: ReleaseDetailPagePro
               <Separator className="my-4" />
               <div>
                 <label className="text-sm font-medium text-slate-500">Description</label>
-                <p className="text-slate-900 mt-1 whitespace-pre-wrap">{release.description}</p>
+                <ReleaseDescription text={release.description} />
               </div>
             </>
           )}
