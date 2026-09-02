@@ -204,6 +204,15 @@ export function AutoRunControls({ releaseId, customers }: AutoRunControlsProps) 
     });
   };
 
+  const allSelected = customers.length > 0 && customers.every((c) => selected.has(c.id));
+  const someSelected = customers.some((c) => selected.has(c.id));
+
+  const selectAll = (checked: boolean) =>
+    setSelected(checked ? new Set(customers.map((c) => c.id)) : new Set());
+
+  const invertSelected = () =>
+    setSelected(new Set(customers.filter((c) => !selected.has(c.id)).map((c) => c.id)));
+
   // Single-customer run (matrix header button or the dialog's per-row play):
   // joins the active pool run alongside it, or starts a fresh run otherwise
   const startCustomerRun = (customerId: number) => {
@@ -270,6 +279,27 @@ export function AutoRunControls({ releaseId, customers }: AutoRunControlsProps) 
                       }}
                       className="w-20 p-2 border rounded"
                     />
+                  </div>
+                  <div className="flex items-center gap-2 pb-2 border-b">
+                    <Checkbox
+                      id="auto-run-select-all"
+                      checked={allSelected ? true : someSelected ? 'indeterminate' : false}
+                      onCheckedChange={(checked) => selectAll(checked === true)}
+                    />
+                    <label
+                      htmlFor="auto-run-select-all"
+                      className="flex-1 text-sm font-medium cursor-pointer"
+                    >
+                      Select all ({selected.size}/{customers.length})
+                    </label>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-7 text-xs"
+                      onClick={invertSelected}
+                    >
+                      Invert
+                    </Button>
                   </div>
                   <div className="space-y-2 max-h-72 overflow-auto">
                     {customers.map((c) => (
