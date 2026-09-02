@@ -306,6 +306,21 @@ export function CroniclePanel({ clusterId, clusterName, config }: CroniclePanelP
     }
   };
 
+  /**
+   * Run an event immediately with param overrides (from the edit dialog).
+   * The overrides are merged into this run only — the event is not saved.
+   */
+  const runWithParams = async (eventId: string, params: Record<string, string>) => {
+    const resp = await runEvent(clusterName, config, eventId, { params });
+    setEditEvent(null);
+    if (resp.ids && resp.ids.length > 0) {
+      setMonitorJobId(resp.ids[0]);
+      refreshActiveJobs();
+    } else {
+      setDataError(`Event queued (queue depth ${resp.queue ?? 1}) — it will start when a slot frees up.`);
+    }
+  };
+
   const abort = async (jobId: string) => {
     if (abortingId) return;
     setAbortingId(jobId);
@@ -494,9 +509,9 @@ export function CroniclePanel({ clusterId, clusterName, config }: CroniclePanelP
   const categoryTitle = (id: string) =>
     categories.find((c) => c.id === id)?.title ?? id;
 
-  const filteredEvents = events.filter(
-    (e) => selectedCategory === ALL_CATEGORIES || e.category === selectedCategory
-  );
+  const filteredEvents = events
+    .filter((e) => selectedCategory === ALL_CATEGORIES || e.category === selectedCategory)
+    .sort((a, b) => a.title.localeCompare(b.title));
   const filteredJobs = activeJobs.filter(
     (j) => selectedCategory === ALL_CATEGORIES || j.category === selectedCategory
   );
@@ -888,6 +903,7 @@ export function CroniclePanel({ clusterId, clusterName, config }: CroniclePanelP
           open={!!editEvent}
           onOpenChange={(open) => !open && setEditEvent(null)}
           onSaved={loadData}
+          onRun={(params) => runWithParams(editEvent.id, params)}
         />
       )}
 

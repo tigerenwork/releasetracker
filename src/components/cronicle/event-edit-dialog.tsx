@@ -17,7 +17,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Braces, Loader2, Plus, X } from 'lucide-react';
+import { Braces, Loader2, Play, Plus, X } from 'lucide-react';
 import { updateEvent, type EventUpdate } from '@/lib/cronicle/client';
 import type { CronicleCategory, CronicleConfig, CronicleEvent } from '@/lib/cronicle/types';
 import { JsonEditor } from '@/components/cronicle/json-editor';
@@ -37,6 +37,8 @@ interface EventEditDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onSaved: () => void;
+  /** Run the event once with the given params — the edits are not saved */
+  onRun: (params: Record<string, string>) => Promise<void>;
 }
 
 const TIMING_FIELDS = [
@@ -100,6 +102,7 @@ export function EventEditDialog({
   open,
   onOpenChange,
   onSaved,
+  onRun,
 }: EventEditDialogProps) {
   const [title, setTitle] = useState(event.title);
   const [category, setCategory] = useState(event.category);
@@ -123,6 +126,7 @@ export function EventEditDialog({
   const [params, setParams] = useState<ParamRow[]>([]);
 
   const [saving, setSaving] = useState(false);
+  const [running, setRunning] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [jsonError, setJsonError] = useState<string | null>(null);
 
@@ -192,6 +196,22 @@ export function EventEditDialog({
     }
   };
 
+  /** Merge the param rows and promoted request params into one object */
+  const buildParams = (): Record<string, string> => {
+    const paramObj: Record<string, string> = {};
+    for (const row of params) {
+      const key = row.key.trim();
+      if (key) paramObj[key] = row.value;
+    }
+    // Promoted params: keep them if they were already on the event, or were filled in
+    for (const key of PROMOTED_PARAMS) {
+      if (promotedPresent.has(key) || promoted[key].trim()) {
+        paramObj[key] = promoted[key];
+      }
+    }
+    return paramObj;
+  };
+
   const save = async () => {
     if (saving) return;
     setSaving(true);
@@ -215,18 +235,7 @@ export function EventEditDialog({
         }
       }
 
-      const paramObj: Record<string, string> = {};
-      for (const row of params) {
-        const key = row.key.trim();
-        if (key) paramObj[key] = row.value;
-      }
-      // Promoted params: keep them if they were already on the event, or were filled in
-      for (const key of PROMOTED_PARAMS) {
-        if (promotedPresent.has(key) || promoted[key].trim()) {
-          paramObj[key] = promoted[key];
-        }
-      }
-      updates.params = paramObj;
+      updates.params = buildParams();
 
       await updateEvent(clusterName, config, event.id, updates);
       onOpenChange(false);
@@ -235,6 +244,21 @@ export function EventEditDialog({
       setError(err instanceof Error ? err.message : String(err));
     } finally {
       setSaving(false);
+    }
+  };
+
+  /** Run the event once with the current form values, without saving them */
+  const runOnce = async () => {
+    if (running || saving) return;
+    setRunning(true);
+    setError(null);
+    try {
+      await onRun(buildParams());
+      onOpenChange(false);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setRunning(false);
     }
   };
 
@@ -434,10 +458,23 @@ export function EventEditDialog({
 
           {error && <p className="text-sm text-red-600">{error}</p>}
           <div className="flex justify-end gap-2">
-            <Button variant="outline" onClick={() => onOpenChange(false)} disabled={saving}>
+            <Button variant="outline" onClick={() => onOpenChange(false)} disabled={saving || running}>
               Cancel
             </Button>
-            <Button onClick={save} disabled={saving || !title.trim() || !category}>
+            <Button
+              variant="outline"
+              onClick={runOnce}
+              disabled={saving || running}
+              title="Run the event now with the current edits, without saving them"
+            >
+              {running ? (
+                <Loader2 className="h-4 w-4 animate-spin mr-2" />
+              ) : (
+                <Play className="h-4 w-4 mr-2" />
+              )}
+              Run
+            </Button>
+            <Button onClick={save} disabled={saving || running || !title.trim() || !category}>
               {saving && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
               Save
             </Button>
