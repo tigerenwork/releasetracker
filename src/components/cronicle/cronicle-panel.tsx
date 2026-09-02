@@ -206,7 +206,7 @@ export function CroniclePanel({ clusterId, clusterName, config }: CroniclePanelP
         getActiveJobs(clusterName, config),
         getHistory(clusterName, config, 50),
       ]);
-      setCategories(cats.rows);
+      setCategories([...cats.rows].sort((a, b) => a.title.localeCompare(b.title)));
       setEvents(schedule.rows);
       setActiveJobs(jobs);
       setHistory(hist.rows);
