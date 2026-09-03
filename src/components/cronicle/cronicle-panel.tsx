@@ -45,6 +45,7 @@ import {
   Pencil,
   Play,
   RefreshCw,
+  Search,
   Settings,
   Square,
   Trash2,
@@ -134,6 +135,9 @@ export function CroniclePanel({ clusterId, clusterName, config }: CroniclePanelP
   const [selectedCategory, setSelectedCategoryState] = useState<string>(
     config.categoryId || ALL_CATEGORIES
   );
+
+  // Free-text event filter; while set, it applies across all categories
+  const [search, setSearch] = useState('');
 
   // Per-event history dialog
   const [eventHistoryFor, setEventHistoryFor] = useState<{ id: string; title: string } | null>(null);
@@ -527,8 +531,14 @@ export function CroniclePanel({ clusterId, clusterName, config }: CroniclePanelP
   const categoryTitle = (id: string) =>
     categories.find((c) => c.id === id)?.title ?? id;
 
+  // Free-text search applies across all categories; otherwise filter by category
+  const searchLower = search.trim().toLowerCase();
   const filteredEvents = events
-    .filter((e) => selectedCategory === ALL_CATEGORIES || e.category === selectedCategory)
+    .filter((e) =>
+      searchLower
+        ? e.title.toLowerCase().includes(searchLower)
+        : selectedCategory === ALL_CATEGORIES || e.category === selectedCategory
+    )
     .sort((a, b) => a.title.localeCompare(b.title));
   const filteredJobs = activeJobs.filter(
     (j) => selectedCategory === ALL_CATEGORIES || j.category === selectedCategory
@@ -652,6 +662,25 @@ export function CroniclePanel({ clusterId, clusterName, config }: CroniclePanelP
               ))}
             </SelectContent>
           </Select>
+          <div className="relative w-64">
+            <Search className="pointer-events-none absolute left-2.5 top-2.5 h-4 w-4 text-slate-400" />
+            <Input
+              className="pl-8 pr-7"
+              placeholder="Search events…"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              title="Filter events by name — applies across all categories"
+            />
+            {search && (
+              <button
+                className="absolute right-2 top-2.5 text-slate-400 hover:text-slate-600"
+                onClick={() => setSearch('')}
+                title="Clear search"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            )}
+          </div>
           <div className="flex-1" />
           <Button
             variant="outline"
