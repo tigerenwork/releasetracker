@@ -80,10 +80,15 @@ export async function ensureCronicleForward(
         throw new CronicleApiError('Port-forward to Cronicle disappeared', 'portforward');
       }
       // The fixed local port may still be held by another cluster's forward
-      // (e.g. after switching clusters) — stop it so we can take the port over
+      // (e.g. after switching clusters) — stop it so we can take the port over.
+      // Best-effort: the forward may already be gone by the time we stop it.
       const occupying = forwards.find((f) => f.localPort === config.localPort);
       if (occupying) {
-        await bridge.stopPortForward(occupying.id);
+        try {
+          await bridge.stopPortForward(occupying.id);
+        } catch {
+          // Already gone — the port is free, carry on
+        }
       }
       await bridge.startPortForward({
         kubeContext: clusterName,
