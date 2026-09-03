@@ -79,6 +79,12 @@ export async function ensureCronicleForward(
       if (started) {
         throw new CronicleApiError('Port-forward to Cronicle disappeared', 'portforward');
       }
+      // The fixed local port may still be held by another cluster's forward
+      // (e.g. after switching clusters) — stop it so we can take the port over
+      const occupying = forwards.find((f) => f.localPort === config.localPort);
+      if (occupying) {
+        await bridge.stopPortForward(occupying.id);
+      }
       await bridge.startPortForward({
         kubeContext: clusterName,
         namespace: config.namespace,
