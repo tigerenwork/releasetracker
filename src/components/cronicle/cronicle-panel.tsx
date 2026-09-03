@@ -734,7 +734,7 @@ export function CroniclePanel({ clusterId, clusterName, config }: CroniclePanelP
                 <ChevronDown className="h-4 w-4 opacity-50" />
               </Button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent className="w-72 max-h-72 overflow-y-auto">
+            <DropdownMenuContent className="min-w-72 w-auto max-w-[480px] max-h-72 overflow-y-auto">
               {allEventNames.map((name) => (
                 <DropdownMenuCheckboxItem
                   key={name}
@@ -743,8 +743,9 @@ export function CroniclePanel({ clusterId, clusterName, config }: CroniclePanelP
                     setSelectedEventNames((prev) => toggleSetValue(prev, name, checked === true))
                   }
                   onSelect={(e) => e.preventDefault()}
+                  title={name}
                 >
-                  <span className="font-mono text-xs">{name}</span>
+                  <span className="font-mono text-xs whitespace-nowrap">{name}</span>
                 </DropdownMenuCheckboxItem>
               ))}
             </DropdownMenuContent>
@@ -940,7 +941,7 @@ export function CroniclePanel({ clusterId, clusterName, config }: CroniclePanelP
                               />
                             )}
                             <span
-                              className={`ml-1.5 text-xs font-normal hidden lg:inline ${
+                              className={`ml-1.5 text-xs font-normal hidden lg:inline-block w-14 text-left ${
                                 event.enabled ? 'text-green-700' : 'text-slate-400'
                               }`}
                             >
