@@ -29,6 +29,16 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
+import {
   CalendarClock,
   History,
   Loader2,
@@ -37,6 +47,7 @@ import {
   RefreshCw,
   Settings,
   Square,
+  Trash2,
   X,
 } from 'lucide-react';
 import {
@@ -46,6 +57,7 @@ import {
 } from '@/lib/services/agent-bridge';
 import {
   abortJob,
+  deleteEvent,
   getActiveJobs,
   getCategories,
   getEventHistory,
@@ -142,6 +154,7 @@ export function CroniclePanel({ clusterId, clusterName, config }: CroniclePanelP
   const [moveTarget, setMoveTarget] = useState('');
   const [bulk, setBulk] = useState<{ done: number; total: number } | null>(null);
   const [bulkMessage, setBulkMessage] = useState<{ error: boolean; text: string } | null>(null);
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
 
   // Job monitor dialog
   const [monitorJobId, setMonitorJobId] = useState<string | null>(null);
@@ -364,7 +377,7 @@ export function CroniclePanel({ clusterId, clusterName, config }: CroniclePanelP
     setBulkMessage(null);
   };
 
-  const bulkApply = async (action: 'enable' | 'disable' | 'move') => {
+  const bulkApply = async (action: 'enable' | 'disable' | 'move' | 'delete') => {
     if (bulk || selection.size === 0) return;
     if (action === 'move' && !moveTarget) return;
     const ids = [...selection];
@@ -375,14 +388,18 @@ export function CroniclePanel({ clusterId, clusterName, config }: CroniclePanelP
     let firstError = '';
     for (let i = 0; i < ids.length; i++) {
       try {
-        await updateEvent(
-          clusterName,
-          config,
-          ids[i],
-          action === 'move'
-            ? { category: moveTarget }
-            : { enabled: action === 'enable' ? 1 : 0 }
-        );
+        if (action === 'delete') {
+          await deleteEvent(clusterName, config, ids[i]);
+        } else {
+          await updateEvent(
+            clusterName,
+            config,
+            ids[i],
+            action === 'move'
+              ? { category: moveTarget }
+              : { enabled: action === 'enable' ? 1 : 0 }
+          );
+        }
       } catch (err) {
         failed++;
         if (!firstError) firstError = errMessage(err);
@@ -391,10 +408,11 @@ export function CroniclePanel({ clusterId, clusterName, config }: CroniclePanelP
     }
     setBulk(null);
     const ok = ids.length - failed;
+    const verb = action === 'delete' ? 'Deleted' : 'Updated';
     setBulkMessage(
       failed === 0
-        ? { error: false, text: `Updated ${ok} event${ok === 1 ? '' : 's'}.` }
-        : { error: true, text: `Updated ${ok}/${ids.length} — first error: ${firstError}` }
+        ? { error: false, text: `${verb} ${ok} event${ok === 1 ? '' : 's'}.` }
+        : { error: true, text: `${verb} ${ok}/${ids.length} — first error: ${firstError}` }
     );
     setSelection(new Set());
     setMoveTarget('');
@@ -595,6 +613,16 @@ export function CroniclePanel({ clusterId, clusterName, config }: CroniclePanelP
             onClick={() => bulkApply('move')}
           >
             Move
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            className="text-red-600 border-red-200 hover:bg-red-50 hover:text-red-700"
+            disabled={!!bulk}
+            onClick={() => setConfirmingDelete(true)}
+          >
+            <Trash2 className="h-4 w-4 mr-1" />
+            Delete
           </Button>
           <Button
             variant="ghost"
@@ -892,6 +920,31 @@ export function CroniclePanel({ clusterId, clusterName, config }: CroniclePanelP
           </section>
         </>
       )}
+
+      {/* Bulk delete confirmation */}
+      <AlertDialog open={confirmingDelete} onOpenChange={setConfirmingDelete}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              Delete {selection.size} event{selection.size === 1 ? '' : 's'}?
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              This permanently removes the selected events from the schedule and cannot be
+              undone. Events with active jobs cannot be deleted and will be skipped with an
+              error.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-red-600 hover:bg-red-700"
+              onClick={() => bulkApply('delete')}
+            >
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {/* Event edit dialog */}
       {editEvent && (

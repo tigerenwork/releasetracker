@@ -211,6 +211,18 @@ export function updateEvent(
   return apiCall(clusterName, config, 'update_event', { id, ...updates });
 }
 
+/**
+ * Delete a scheduled event (requires the `delete_events` privilege).
+ * Cronicle refuses to delete events that have active jobs.
+ */
+export function deleteEvent(
+  clusterName: string,
+  config: CronicleConfig,
+  id: string
+): Promise<CronicleOkResponse> {
+  return apiCall(clusterName, config, 'delete_event', { id });
+}
+
 export function getHistory(
   clusterName: string,
   config: CronicleConfig,
