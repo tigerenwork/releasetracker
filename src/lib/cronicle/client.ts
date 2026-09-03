@@ -58,6 +58,7 @@ export async function ensureCronicleForward(
   const deadline = Date.now() + timeoutMs;
 
   let started = false;
+  let lastStartError: unknown = null;
   for (;;) {
     const forwards = await bridge.listPortForwards();
     const match = forwards.find(
@@ -76,9 +77,6 @@ export async function ensureCronicleForward(
     }
 
     if (!match) {
-      if (started) {
-        throw new CronicleApiError('Port-forward to Cronicle disappeared', 'portforward');
-      }
       // The fixed local port may still be held by another cluster's forward
       // (e.g. after switching clusters) — stop it so we can take the port over.
       // Best-effort: the forward may already be gone by the time we stop it.
@@ -89,19 +87,29 @@ export async function ensureCronicleForward(
         } catch {
           // Already gone — the port is free, carry on
         }
+      } else if (started) {
+        throw new CronicleApiError('Port-forward to Cronicle disappeared', 'portforward');
+      } else {
+        try {
+          await bridge.startPortForward({
+            kubeContext: clusterName,
+            namespace: config.namespace,
+            resource: config.resource,
+            localPort: config.localPort,
+            remotePort: config.remotePort,
+          });
+          started = true;
+        } catch (err) {
+          // The port may still be releasing after stopping the previous
+          // forward — remember the error and retry until the deadline
+          lastStartError = err;
+        }
       }
-      await bridge.startPortForward({
-        kubeContext: clusterName,
-        namespace: config.namespace,
-        resource: config.resource,
-        localPort: config.localPort,
-        remotePort: config.remotePort,
-      });
-      started = true;
     }
 
     // match.status === 'starting', or we just started it — poll until ready
     if (Date.now() > deadline) {
+      if (lastStartError) throw lastStartError;
       throw new CronicleApiError('Timed out waiting for Cronicle port-forward', 'portforward');
     }
     await new Promise((resolve) => setTimeout(resolve, 1000));
