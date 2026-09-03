@@ -88,6 +88,17 @@ function rawTimingFromEvent(event: CronicleEvent): Record<RawTimingKey, string> 
   };
 }
 
+/** JSON validation for the Data field; empty is allowed (no payload) */
+function validateData(v: string): string | null {
+  if (!v.trim()) return null;
+  try {
+    JSON.parse(v);
+    return null;
+  } catch (err) {
+    return err instanceof Error ? err.message : String(err);
+  }
+}
+
 /**
  * Edit a Cronicle event: title, category, timing and plugin params.
  * `update_event` replaces timing/params wholesale when sent, so the form is
@@ -153,7 +164,7 @@ export function EventEditDialog({
     setPromoted(promotedValues);
     setParams(rest);
     setError(null);
-    setJsonError(null);
+    setJsonError(validateData(promotedValues.data));
   }, [open, event]);
 
   const formatData = () => {
@@ -379,8 +390,9 @@ export function EventEditDialog({
                   value={promoted.data}
                   onChange={(v) => {
                     setPromoted({ ...promoted, data: v });
-                    setJsonError(null);
+                    setJsonError(validateData(v));
                   }}
+                  className={jsonError ? 'border-red-400 focus-within:border-red-500 focus-within:ring-red-100' : undefined}
                 />
                 {jsonError && <p className="text-xs text-red-600">Invalid JSON: {jsonError}</p>}
               </div>
