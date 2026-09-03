@@ -145,10 +145,10 @@ export function CroniclePanel({ clusterId, clusterName, config }: CroniclePanelP
 
   // Free-text event filter; while set, it applies across all categories
   const [search, setSearch] = useState('');
-  // When on, the search text must equal the event name (the part after the last ':')
-  const [exactMatch, setExactMatch] = useState(false);
   // Filter by service (the part before the first ':'); empty set = all services
   const [selectedServices, setSelectedServices] = useState<Set<string>>(new Set());
+  // Filter by event name (the part after the last ':'); empty set = all names
+  const [selectedEventNames, setSelectedEventNames] = useState<Set<string>>(new Set());
 
   // Per-event history dialog
   const [eventHistoryFor, setEventHistoryFor] = useState<{ id: string; title: string } | null>(null);
@@ -547,14 +547,20 @@ export function CroniclePanel({ clusterId, clusterName, config }: CroniclePanelP
   const serviceOf = (title: string) => title.split(':')[0];
 
   const allServices = [...new Set(events.map((e) => serviceOf(e.title)))].sort();
+  // Event names offered for picking are scoped by the selected services
+  const allEventNames = [
+    ...new Set(
+      events
+        .filter((e) => selectedServices.size === 0 || selectedServices.has(serviceOf(e.title)))
+        .map((e) => eventNameOf(e.title))
+    ),
+  ].sort();
 
-  const toggleService = (service: string, checked: boolean) => {
-    setSelectedServices((prev) => {
-      const next = new Set(prev);
-      if (checked) next.add(service);
-      else next.delete(service);
-      return next;
-    });
+  const toggleSetValue = (set: Set<string>, value: string, checked: boolean) => {
+    const next = new Set(set);
+    if (checked) next.add(value);
+    else next.delete(value);
+    return next;
   };
 
   // Free-text search applies across all categories; otherwise filter by category
@@ -562,10 +568,9 @@ export function CroniclePanel({ clusterId, clusterName, config }: CroniclePanelP
   const filteredEvents = events
     .filter((e) => {
       if (selectedServices.size > 0 && !selectedServices.has(serviceOf(e.title))) return false;
+      if (selectedEventNames.size > 0 && !selectedEventNames.has(eventNameOf(e.title))) return false;
       if (searchLower) {
-        return exactMatch
-          ? eventNameOf(e.title).toLowerCase() === searchLower
-          : e.title.toLowerCase().includes(searchLower);
+        return e.title.toLowerCase().includes(searchLower);
       }
       return selectedCategory === ALL_CATEGORIES || e.category === selectedCategory;
     })
@@ -708,10 +713,38 @@ export function CroniclePanel({ clusterId, clusterName, config }: CroniclePanelP
                 <DropdownMenuCheckboxItem
                   key={svc}
                   checked={selectedServices.has(svc)}
-                  onCheckedChange={(checked) => toggleService(svc, checked === true)}
+                  onCheckedChange={(checked) =>
+                    setSelectedServices((prev) => toggleSetValue(prev, svc, checked === true))
+                  }
                   onSelect={(e) => e.preventDefault()}
                 >
                   {svc}
+                </DropdownMenuCheckboxItem>
+              ))}
+            </DropdownMenuContent>
+          </DropdownMenu>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline" className="w-48 justify-between font-normal">
+                <span className="truncate">
+                  {selectedEventNames.size === 0
+                    ? 'All event names'
+                    : `${selectedEventNames.size} name${selectedEventNames.size === 1 ? '' : 's'}`}
+                </span>
+                <ChevronDown className="h-4 w-4 opacity-50" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent className="w-72 max-h-72 overflow-y-auto">
+              {allEventNames.map((name) => (
+                <DropdownMenuCheckboxItem
+                  key={name}
+                  checked={selectedEventNames.has(name)}
+                  onCheckedChange={(checked) =>
+                    setSelectedEventNames((prev) => toggleSetValue(prev, name, checked === true))
+                  }
+                  onSelect={(e) => e.preventDefault()}
+                >
+                  <span className="font-mono text-xs">{name}</span>
                 </DropdownMenuCheckboxItem>
               ))}
             </DropdownMenuContent>
@@ -720,7 +753,7 @@ export function CroniclePanel({ clusterId, clusterName, config }: CroniclePanelP
             <Search className="pointer-events-none absolute left-2.5 top-2.5 h-4 w-4 text-slate-400" />
             <Input
               className="pl-8 pr-7"
-              placeholder={exactMatch ? 'Exact event name…' : 'Search events…'}
+              placeholder="Search events…"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               title="Filter events by name — applies across all categories"
@@ -735,14 +768,6 @@ export function CroniclePanel({ clusterId, clusterName, config }: CroniclePanelP
               </button>
             )}
           </div>
-          <Button
-            variant={exactMatch ? 'default' : 'outline'}
-            size="sm"
-            onClick={() => setExactMatch((v) => !v)}
-            title="Exact match: the search text must equal the event name (the part after the last ':')"
-          >
-            Exact
-          </Button>
           <div className="flex-1" />
           <Button
             variant="outline"
