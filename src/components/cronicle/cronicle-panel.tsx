@@ -39,7 +39,14 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 import {
+  DropdownMenu,
+  DropdownMenuCheckboxItem,
+  DropdownMenuContent,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+import {
   CalendarClock,
+  ChevronDown,
   History,
   Loader2,
   Pencil,
@@ -138,6 +145,10 @@ export function CroniclePanel({ clusterId, clusterName, config }: CroniclePanelP
 
   // Free-text event filter; while set, it applies across all categories
   const [search, setSearch] = useState('');
+  // When on, the search text must equal the event name (the part after the last ':')
+  const [exactMatch, setExactMatch] = useState(false);
+  // Filter by service (the part before the first ':'); empty set = all services
+  const [selectedServices, setSelectedServices] = useState<Set<string>>(new Set());
 
   // Per-event history dialog
   const [eventHistoryFor, setEventHistoryFor] = useState<{ id: string; title: string } | null>(null);
@@ -531,14 +542,33 @@ export function CroniclePanel({ clusterId, clusterName, config }: CroniclePanelP
   const categoryTitle = (id: string) =>
     categories.find((c) => c.id === id)?.title ?? id;
 
+  // Event titles look like "<service>:<category>:<event_name>"
+  const eventNameOf = (title: string) => title.split(':').pop() ?? title;
+  const serviceOf = (title: string) => title.split(':')[0];
+
+  const allServices = [...new Set(events.map((e) => serviceOf(e.title)))].sort();
+
+  const toggleService = (service: string, checked: boolean) => {
+    setSelectedServices((prev) => {
+      const next = new Set(prev);
+      if (checked) next.add(service);
+      else next.delete(service);
+      return next;
+    });
+  };
+
   // Free-text search applies across all categories; otherwise filter by category
   const searchLower = search.trim().toLowerCase();
   const filteredEvents = events
-    .filter((e) =>
-      searchLower
-        ? e.title.toLowerCase().includes(searchLower)
-        : selectedCategory === ALL_CATEGORIES || e.category === selectedCategory
-    )
+    .filter((e) => {
+      if (selectedServices.size > 0 && !selectedServices.has(serviceOf(e.title))) return false;
+      if (searchLower) {
+        return exactMatch
+          ? eventNameOf(e.title).toLowerCase() === searchLower
+          : e.title.toLowerCase().includes(searchLower);
+      }
+      return selectedCategory === ALL_CATEGORIES || e.category === selectedCategory;
+    })
     .sort((a, b) => a.title.localeCompare(b.title));
   const filteredJobs = activeJobs.filter(
     (j) => selectedCategory === ALL_CATEGORIES || j.category === selectedCategory
@@ -662,11 +692,35 @@ export function CroniclePanel({ clusterId, clusterName, config }: CroniclePanelP
               ))}
             </SelectContent>
           </Select>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline" className="w-44 justify-between font-normal">
+                <span className="truncate">
+                  {selectedServices.size === 0
+                    ? 'All services'
+                    : `${selectedServices.size} service${selectedServices.size === 1 ? '' : 's'}`}
+                </span>
+                <ChevronDown className="h-4 w-4 opacity-50" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent className="w-56 max-h-72 overflow-y-auto">
+              {allServices.map((svc) => (
+                <DropdownMenuCheckboxItem
+                  key={svc}
+                  checked={selectedServices.has(svc)}
+                  onCheckedChange={(checked) => toggleService(svc, checked === true)}
+                  onSelect={(e) => e.preventDefault()}
+                >
+                  {svc}
+                </DropdownMenuCheckboxItem>
+              ))}
+            </DropdownMenuContent>
+          </DropdownMenu>
           <div className="relative w-64">
             <Search className="pointer-events-none absolute left-2.5 top-2.5 h-4 w-4 text-slate-400" />
             <Input
               className="pl-8 pr-7"
-              placeholder="Search events…"
+              placeholder={exactMatch ? 'Exact event name…' : 'Search events…'}
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               title="Filter events by name — applies across all categories"
@@ -681,6 +735,14 @@ export function CroniclePanel({ clusterId, clusterName, config }: CroniclePanelP
               </button>
             )}
           </div>
+          <Button
+            variant={exactMatch ? 'default' : 'outline'}
+            size="sm"
+            onClick={() => setExactMatch((v) => !v)}
+            title="Exact match: the search text must equal the event name (the part after the last ':')"
+          >
+            Exact
+          </Button>
           <div className="flex-1" />
           <Button
             variant="outline"
