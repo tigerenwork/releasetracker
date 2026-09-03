@@ -7,7 +7,6 @@ import { Label } from '@/components/ui/label';
 import {
   Dialog,
   DialogContent,
-  DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
 import {
@@ -266,11 +265,43 @@ export function EventEditDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-[calc(100%-2rem)] sm:max-w-5xl max-h-[85vh] overflow-y-auto">
-        <DialogHeader>
-          <DialogTitle>Edit Event</DialogTitle>
-        </DialogHeader>
-        <div className="space-y-4">
+      <DialogContent className="max-w-[calc(100%-2rem)] sm:max-w-5xl max-h-[85vh]">
+        {/* Actions live in the header so they stay visible while the body scrolls */}
+        <div className="flex items-center gap-2 pr-8">
+          <DialogTitle className="flex-1">Edit Event</DialogTitle>
+          {error && (
+            <p className="text-sm text-red-600 truncate max-w-64" title={error}>
+              {error}
+            </p>
+          )}
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => onOpenChange(false)}
+            disabled={saving || running}
+          >
+            Cancel
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={runOnce}
+            disabled={saving || running}
+            title="Run the event now with the current edits, without saving them"
+          >
+            {running ? (
+              <Loader2 className="h-4 w-4 animate-spin mr-2" />
+            ) : (
+              <Play className="h-4 w-4 mr-2" />
+            )}
+            Run
+          </Button>
+          <Button size="sm" onClick={save} disabled={saving || running || !title.trim() || !category}>
+            {saving && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
+            Save
+          </Button>
+        </div>
+        <div className="space-y-4 max-h-[calc(85vh-7rem)] overflow-y-auto">
           <div className="space-y-2">
             <Label htmlFor="ee-title">Title</Label>
             <Input
@@ -454,30 +485,6 @@ export function EventEditDialog({
                 <span className="ml-1">Add param</span>
               </Button>
             </div>
-          </div>
-
-          {error && <p className="text-sm text-red-600">{error}</p>}
-          <div className="flex justify-end gap-2">
-            <Button variant="outline" onClick={() => onOpenChange(false)} disabled={saving || running}>
-              Cancel
-            </Button>
-            <Button
-              variant="outline"
-              onClick={runOnce}
-              disabled={saving || running}
-              title="Run the event now with the current edits, without saving them"
-            >
-              {running ? (
-                <Loader2 className="h-4 w-4 animate-spin mr-2" />
-              ) : (
-                <Play className="h-4 w-4 mr-2" />
-              )}
-              Run
-            </Button>
-            <Button onClick={save} disabled={saving || running || !title.trim() || !category}>
-              {saving && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
-              Save
-            </Button>
           </div>
         </div>
       </DialogContent>
