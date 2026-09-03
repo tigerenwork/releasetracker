@@ -201,6 +201,13 @@ export function CroniclePanel({ clusterId, clusterName, config }: CroniclePanelP
     setBulkMessage(null);
   };
 
+  const clearFilters = () => {
+    setSelectedCategory(ALL_CATEGORIES);
+    setSearch('');
+    setSelectedServices(new Set());
+    setSelectedEventNames(new Set());
+  };
+
   // agentBridge only exists in the browser; defer until after mount so
   // server-rendered HTML matches the first client render
   useEffect(() => {
@@ -565,6 +572,11 @@ export function CroniclePanel({ clusterId, clusterName, config }: CroniclePanelP
 
   // Free-text search applies across all categories; otherwise filter by category
   const searchLower = search.trim().toLowerCase();
+  const hasFilters =
+    searchLower !== '' ||
+    selectedServices.size > 0 ||
+    selectedEventNames.size > 0 ||
+    selectedCategory !== ALL_CATEGORIES;
   const filteredEvents = events
     .filter((e) => {
       if (selectedServices.size > 0 && !selectedServices.has(serviceOf(e.title))) return false;
@@ -769,6 +781,12 @@ export function CroniclePanel({ clusterId, clusterName, config }: CroniclePanelP
               </button>
             )}
           </div>
+          {hasFilters && (
+            <Button variant="ghost" size="sm" onClick={clearFilters} title="Clear all filters">
+              <X className="h-4 w-4 mr-1" />
+              Clear filters
+            </Button>
+          )}
           <div className="flex-1" />
           <Button
             variant="outline"
