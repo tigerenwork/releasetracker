@@ -38,6 +38,8 @@ export interface CronicleEvent {
     weekdays?: number[];
     years?: number[];
   };
+  /** IANA timezone name; the Cronicle server timezone applies when absent */
+  timezone?: string;
   params?: Record<string, string>;
   timeout?: number;
   retries?: number;

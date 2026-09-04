@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -85,6 +85,7 @@ import type {
 } from '@/lib/cronicle/types';
 import { EventEditDialog } from '@/components/cronicle/event-edit-dialog';
 import { summarizeTiming } from '@/components/cronicle/timing-editor';
+import { ScheduleTimeline } from '@/components/cronicle/schedule-timeline';
 import { updateClusterCronicleConfig } from '@/lib/actions/clusters';
 
 const ALL_CATEGORIES = '__all__';
@@ -122,6 +123,10 @@ function formatTiming(timing?: CronicleEvent['timing']): string {
 function errMessage(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
 }
+
+// Event titles look like "<service>:<category>:<event_name>"
+const eventNameOf = (title: string) => title.split(':').pop() ?? title;
+const serviceOf = (title: string) => title.split(':')[0];
 
 /**
  * Manage Cronicle for a cluster: schedule (filtered by category), run events,
@@ -163,6 +168,9 @@ export function CroniclePanel({ clusterId, clusterName, config }: CroniclePanelP
   const [abortingId, setAbortingId] = useState<string | null>(null);
   const [togglingId, setTogglingId] = useState<string | null>(null);
   const [editEvent, setEditEvent] = useState<CronicleEvent | null>(null);
+
+  // Scheduled events display mode: the classic table or the schedule timeline
+  const [view, setView] = useState<'list' | 'timeline'>('list');
 
   // Bulk selection
   const [selection, setSelection] = useState<Set<string>>(new Set());
@@ -275,6 +283,23 @@ export function CroniclePanel({ clusterId, clusterName, config }: CroniclePanelP
   }, [clusterName, config]);
 
   const configured = !!config.apiKey;
+
+  // Memoized so the timeline (and table) don't recompute on poll ticks.
+  // Must live above the early returns below (rules of hooks).
+  const filteredEvents = useMemo(() => {
+    const searchLower = search.trim().toLowerCase();
+    return events
+      .filter((e) => {
+        if (selectedServices.size > 0 && !selectedServices.has(serviceOf(e.title))) return false;
+        if (selectedEventNames.size > 0 && !selectedEventNames.has(eventNameOf(e.title)))
+          return false;
+        if (searchLower) {
+          return e.title.toLowerCase().includes(searchLower);
+        }
+        return selectedCategory === ALL_CATEGORIES || e.category === selectedCategory;
+      })
+      .sort((a, b) => a.title.localeCompare(b.title));
+  }, [events, search, selectedServices, selectedEventNames, selectedCategory]);
 
   // Initial load once the agent is connected and an API key is configured
   useEffect(() => {
@@ -549,10 +574,6 @@ export function CroniclePanel({ clusterId, clusterName, config }: CroniclePanelP
   const categoryTitle = (id: string) =>
     categories.find((c) => c.id === id)?.title ?? id;
 
-  // Event titles look like "<service>:<category>:<event_name>"
-  const eventNameOf = (title: string) => title.split(':').pop() ?? title;
-  const serviceOf = (title: string) => title.split(':')[0];
-
   const allServices = [...new Set(events.map((e) => serviceOf(e.title)))].sort();
   // Event names offered for picking are scoped by the selected services
   const allEventNames = [
@@ -577,16 +598,6 @@ export function CroniclePanel({ clusterId, clusterName, config }: CroniclePanelP
     selectedServices.size > 0 ||
     selectedEventNames.size > 0 ||
     selectedCategory !== ALL_CATEGORIES;
-  const filteredEvents = events
-    .filter((e) => {
-      if (selectedServices.size > 0 && !selectedServices.has(serviceOf(e.title))) return false;
-      if (selectedEventNames.size > 0 && !selectedEventNames.has(eventNameOf(e.title))) return false;
-      if (searchLower) {
-        return e.title.toLowerCase().includes(searchLower);
-      }
-      return selectedCategory === ALL_CATEGORIES || e.category === selectedCategory;
-    })
-    .sort((a, b) => a.title.localeCompare(b.title));
   const filteredJobs = activeJobs.filter(
     (j) => selectedCategory === ALL_CATEGORIES || j.category === selectedCategory
   );
@@ -892,7 +903,25 @@ export function CroniclePanel({ clusterId, clusterName, config }: CroniclePanelP
             <h3 className="text-sm font-medium text-slate-700 flex items-center gap-2">
               <CalendarClock className="h-4 w-4" />
               Scheduled Events ({filteredEvents.length})
+              <span className="ml-auto flex rounded-md border">
+                {(['list', 'timeline'] as const).map((v) => (
+                  <button
+                    key={v}
+                    className={`px-2 py-1 text-xs capitalize transition-colors ${
+                      view === v
+                        ? 'bg-slate-100 font-medium'
+                        : 'text-slate-500 hover:text-slate-700'
+                    }`}
+                    onClick={() => setView(v)}
+                  >
+                    {v}
+                  </button>
+                ))}
+              </span>
             </h3>
+            {view === 'timeline' ? (
+              <ScheduleTimeline events={filteredEvents} onEditEvent={setEditEvent} />
+            ) : (
             <div className="rounded-md border overflow-x-auto">
               <Table className="min-w-[640px]">
                 <TableHeader>
@@ -1023,6 +1052,7 @@ export function CroniclePanel({ clusterId, clusterName, config }: CroniclePanelP
                 </TableBody>
               </Table>
             </div>
+            )}
           </section>
 
           {/* Recent history */}
