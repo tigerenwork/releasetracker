@@ -16,7 +16,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Braces, Loader2, Play, Plus, X } from 'lucide-react';
+import { Braces, History, Loader2, Play, Plus, X } from 'lucide-react';
 import { updateEvent, type EventUpdate } from '@/lib/cronicle/client';
 import type { CronicleCategory, CronicleConfig, CronicleEvent } from '@/lib/cronicle/types';
 import { JsonEditor } from '@/components/cronicle/json-editor';
@@ -38,6 +38,8 @@ interface EventEditDialogProps {
   onSaved: () => void;
   /** Run the event once with the given params — the edits are not saved */
   onRun: (params: Record<string, string>) => Promise<void>;
+  /** Show this event's run history (closes the edit dialog) */
+  onShowHistory: () => void;
 }
 
 const TIMING_FIELDS = [
@@ -113,6 +115,7 @@ export function EventEditDialog({
   onOpenChange,
   onSaved,
   onRun,
+  onShowHistory,
 }: EventEditDialogProps) {
   const [title, setTitle] = useState(event.title);
   const [category, setCategory] = useState(event.category);
@@ -285,6 +288,16 @@ export function EventEditDialog({
               {error}
             </p>
           )}
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={onShowHistory}
+            disabled={saving || running}
+            title="Show recent runs of this event"
+          >
+            <History className="h-4 w-4 mr-1" />
+            History
+          </Button>
           <Button
             variant="outline"
             size="sm"
