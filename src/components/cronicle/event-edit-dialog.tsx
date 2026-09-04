@@ -38,7 +38,7 @@ interface EventEditDialogProps {
   onSaved: () => void;
   /** Run the event once with the given params — the edits are not saved */
   onRun: (params: Record<string, string>) => Promise<void>;
-  /** Show this event's run history (closes the edit dialog) */
+  /** Show this event's run history (stacked above the edit dialog) */
   onShowHistory: () => void;
 }
 

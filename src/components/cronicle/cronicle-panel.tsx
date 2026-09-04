@@ -1092,10 +1092,8 @@ export function CroniclePanel({ clusterId, clusterName, config }: CroniclePanelP
           onOpenChange={(open) => !open && setEditEvent(null)}
           onSaved={loadData}
           onRun={(params) => runWithParams(editEvent.id, params)}
-          onShowHistory={() => {
-            setEditEvent(null);
-            openEventHistory(editEvent);
-          }}
+          // History opens stacked above; closing it returns to the edit dialog
+          onShowHistory={() => openEventHistory(editEvent)}
         />
       )}
 
