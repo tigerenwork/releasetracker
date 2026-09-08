@@ -16,7 +16,7 @@ import { appFromPodName } from '@/lib/grafana';
 import { formatRelativeTime, statusBadgeClass } from '@/components/pods/pod-utils';
 import { ContainerCommandDialog } from '@/components/pods/container-command-dialog';
 import { ContainerShellDialog } from '@/components/pods/container-shell-dialog';
-import { ContainerLogsDialog } from '@/components/pods/container-logs-dialog';
+import { ContainerLogsButton } from '@/components/pods/logs-dock';
 import { PodRestartDialog } from '@/components/pods/pod-restart-dialog';
 import { ConfigEditorDialog } from '@/components/pods/config-editor-dialog';
 import { GrafanaExploreDialog } from '@/components/grafana/grafana-explore-dialog';
@@ -180,7 +180,7 @@ export function PodTable({ pods, namespace, kubeContext, onPodsChanged }: PodTab
                                       podName={pod.name}
                                       containerName={container.name}
                                     />
-                                    <ContainerLogsDialog
+                                    <ContainerLogsButton
                                       kubeContext={kubeContext}
                                       namespace={namespace}
                                       podName={pod.name}

@@ -2,6 +2,8 @@ import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { Sidebar } from "@/components/layout/sidebar";
+import { LogsDockProvider } from "@/components/pods/logs-dock-context";
+import { LogsDock } from "@/components/pods/logs-dock";
 import { initDb } from "@/lib/db";
 
 const geistSans = Geist({
@@ -35,7 +37,10 @@ export default function RootLayout({
         <div className="flex min-h-screen">
           <Sidebar />
           <main className="flex-1 p-8 overflow-auto">
-            {children}
+            <LogsDockProvider>
+              {children}
+              <LogsDock />
+            </LogsDockProvider>
           </main>
         </div>
       </body>
