@@ -11,6 +11,7 @@ import { JenkinsExecutor } from '@/components/executors/jenkins-executor';
 import { BashExecutor } from '@/components/executors/bash-executor';
 import { ConfigMapExecutor } from '@/components/executors/configmap-executor';
 import { SqlExecutor } from '@/components/executors/sql-step-executor';
+import { ChecklistDisplay } from '@/components/executors/checklist-display';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
 import { getLastScriptExecution } from '@/lib/actions/step-executions';
@@ -138,6 +139,7 @@ interface StepDetailPanelProps {
   onResetToTemplate: (id: number) => Promise<void>;
   onEditCustom?: (id: number, data: any) => Promise<void>;
   onDeleteCustom?: (id: number) => Promise<void>;
+  onToggleChecklistItem?: (id: number, index: number, checked: boolean) => Promise<void>;
 }
 
 const statusIcons = {
@@ -166,6 +168,7 @@ const typeLabels = {
   text: 'Text',
   jenkins: 'Jenkins Deploy',
   configmap: 'ConfigMap Env',
+  checklist: 'Checklist',
 };
 
 export function StepDetailPanel({
@@ -181,6 +184,7 @@ export function StepDetailPanel({
   onResetToTemplate,
   onEditCustom,
   onDeleteCustom,
+  onToggleChecklistItem,
 }: StepDetailPanelProps) {
   const [notes, setNotes] = useState('');
   const [isEditing, setIsEditing] = useState(false);
@@ -393,6 +397,14 @@ export function StepDetailPanel({
                     </Button>
                   </div>
                 </div>
+              ) : step.type === 'checklist' ? (
+                <ChecklistDisplay
+                  stepId={step.id}
+                  content={step.content}
+                  checkedItems={step.checklistState}
+                  readOnly={readOnly}
+                  onToggle={onToggleChecklistItem}
+                />
               ) : (
                 <div className="overflow-hidden" style={{ maxWidth: '100%', width: '100%' }}>
                   <CodeBlock code={step.content} type={step.type} />

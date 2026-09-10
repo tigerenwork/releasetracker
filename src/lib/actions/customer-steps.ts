@@ -38,6 +38,7 @@ export async function overrideStepContent(stepId: number, newContent: string) {
     .set({ 
       content: newContent, 
       isOverridden: true,
+      checklistState: null,
       updatedAt: new Date()
     })
     .where(eq(customerSteps.id, stepId))
@@ -107,6 +108,29 @@ export async function addCustomStep(
   }).returning();
   revalidatePath(`/releases/${releaseId}`);
   return step;
+}
+
+export async function toggleChecklistItem(stepId: number, index: number, checked: boolean) {
+  const step = await db.query.customerSteps.findFirst({
+    where: eq(customerSteps.id, stepId),
+  });
+  if (!step) throw new Error('Step not found');
+
+  const current = new Set(step.checklistState ?? []);
+  if (checked) {
+    current.add(index);
+  } else {
+    current.delete(index);
+  }
+  const checklistState = [...current].sort((a, b) => a - b);
+
+  const [updated] = await db
+    .update(customerSteps)
+    .set({ checklistState, updatedAt: new Date() })
+    .where(eq(customerSteps.id, stepId))
+    .returning();
+  revalidatePath(`/releases/${step.releaseId}`);
+  return updated;
 }
 
 export async function markStepDone(stepId: number, notes?: string) {
@@ -200,6 +224,7 @@ export async function resetToTemplate(stepId: number) {
       content: step.template.content,
       name: step.template.name,
       isOverridden: false,
+      checklistState: null,
       updatedAt: new Date()
     })
     .where(eq(customerSteps.id, stepId))
@@ -233,7 +258,8 @@ export async function editCustomStep(
   
   const [updated] = await db
     .update(customerSteps)
-    .set({ ...data, updatedAt: new Date() })
+    // Content edits can re-order checklist items — drop their checked state
+    .set({ ...data, ...(data.content !== undefined ? { checklistState: null } : {}), updatedAt: new Date() })
     .where(eq(customerSteps.id, stepId))
     .returning();
   

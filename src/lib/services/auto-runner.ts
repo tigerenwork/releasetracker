@@ -483,7 +483,7 @@ export async function runCustomerSteps(
     if (!isRunnable(step)) continue;
 
     // Manual-only step: pause and let the user handle it via the panel
-    if (step.type === 'text') {
+    if (step.type === 'text' || step.type === 'checklist') {
       hooks.onPause?.(customerId, step, 'manual-step');
       return { customerId, status: 'paused', executed, pausedStep: step, pauseReason: 'manual-step' };
     }

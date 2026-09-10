@@ -66,7 +66,7 @@ export const stepTemplates = sqliteTable('step_templates', {
   releaseId: integer('release_id').notNull().references(() => releases.id, { onDelete: 'cascade' }),
   name: text('name').notNull(),
   category: text('category', { enum: ['deploy', 'verify'] }).notNull(),
-  type: text('type', { enum: ['bash', 'sql', 'rest', 'script', 'text', 'jenkins', 'configmap'] }).notNull(),
+  type: text('type', { enum: ['bash', 'sql', 'rest', 'script', 'text', 'jenkins', 'configmap', 'checklist'] }).notNull(),
   content: text('content').notNull(),
   orderIndex: integer('order_index').notNull(),
   description: text('description'),
@@ -93,9 +93,13 @@ export const customerSteps = sqliteTable('customer_steps', {
   // Copied/Overridden fields
   name: text('name').notNull(),
   category: text('category', { enum: ['deploy', 'verify'] }).notNull(),
-  type: text('type', { enum: ['bash', 'sql', 'rest', 'script', 'text', 'jenkins', 'configmap'] }).notNull(),
+  type: text('type', { enum: ['bash', 'sql', 'rest', 'script', 'text', 'jenkins', 'configmap', 'checklist'] }).notNull(),
   content: text('content').notNull(),
   orderIndex: integer('order_index').notNull(),
+
+  // Checklist steps: content holds items (one per line); this stores the
+  // indexes of completed items. Reset when content is overridden/reset.
+  checklistState: text('checklist_state', { mode: 'json' }).$type<number[]>(),
 
   // Execution tracking
   status: text('status', { enum: ['pending', 'running', 'done', 'failed', 'skipped', 'reverted'] }).default('pending'),
@@ -307,7 +311,7 @@ export type JenkinsSettings = typeof jenkinsSettings.$inferSelect;
 export type NewJenkinsSettings = typeof jenkinsSettings.$inferInsert;
 
 export type StepCategory = 'deploy' | 'verify';
-export type StepType = 'bash' | 'sql' | 'rest' | 'script' | 'text' | 'jenkins' | 'configmap';
+export type StepType = 'bash' | 'sql' | 'rest' | 'script' | 'text' | 'jenkins' | 'configmap' | 'checklist';
 export type ReleaseType = 'onboarding' | 'release' | 'hotfix';
 export type ReleaseStatus = 'draft' | 'active' | 'archived';
 export type StepStatus = 'pending' | 'running' | 'done' | 'failed' | 'skipped' | 'reverted';

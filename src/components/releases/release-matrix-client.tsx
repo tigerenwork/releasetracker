@@ -128,14 +128,21 @@ export function ReleaseMatrixClient({ stepsByCluster, category, releaseId, readO
   const overrideStepContent = async (id: number, content: string) => {
     const { overrideStepContent } = await import('@/lib/actions/customer-steps');
     await overrideStepContent(id, content);
-    patchStep(id, { content, isOverridden: 1 });
+    patchStep(id, { content, isOverridden: 1, checklistState: null });
+    router.refresh();
+  };
+
+  const toggleChecklistItem = async (id: number, index: number, checked: boolean) => {
+    const { toggleChecklistItem } = await import('@/lib/actions/customer-steps');
+    const updated = await toggleChecklistItem(id, index, checked);
+    patchStep(id, { checklistState: updated.checklistState });
     router.refresh();
   };
 
   const resetToTemplate = async (id: number) => {
     const { resetToTemplate } = await import('@/lib/actions/customer-steps');
     await resetToTemplate(id);
-    patchStep(id, { isOverridden: 0, ...(selectedTemplate ? { content: selectedTemplate.content } : {}) });
+    patchStep(id, { isOverridden: 0, checklistState: null, ...(selectedTemplate ? { content: selectedTemplate.content } : {}) });
     router.refresh();
   };
 
@@ -342,6 +349,7 @@ export function ReleaseMatrixClient({ stepsByCluster, category, releaseId, readO
         onResetToTemplate={resetToTemplate}
         onEditCustom={editCustomStep}
         onDeleteCustom={deleteCustomStep}
+        onToggleChecklistItem={toggleChecklistItem}
       />
     </>
   );

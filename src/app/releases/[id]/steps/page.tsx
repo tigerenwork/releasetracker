@@ -39,7 +39,7 @@ interface Step {
   id: number;
   name: string;
   category: 'deploy' | 'verify';
-  type: 'bash' | 'sql' | 'rest' | 'script' | 'text' | 'jenkins' | 'configmap';
+  type: 'bash' | 'sql' | 'rest' | 'script' | 'text' | 'jenkins' | 'configmap' | 'checklist';
   content: string;
   orderIndex: number;
   description?: string;
@@ -52,7 +52,7 @@ const POD_TARGET_TYPES = ['bash', 'sql', 'script', 'rest', 'configmap'];
 // "Automation target" section of the template add/edit dialog: per-type
 // defaults the auto-runner uses when no per-customer override exists.
 function AutomationTargetFields({ type, config }: { type: string; config?: StepExecutionConfig | null }) {
-  if (type === 'text') return null;
+  if (type === 'text' || type === 'checklist') return null;
   const inputCls = 'w-full p-2 border rounded';
 
   return (
@@ -383,6 +383,7 @@ function StepList({ steps, category, releaseId, onUpdate }: StepListProps) {
                   <option value="text">Text</option>
                   <option value="jenkins">Jenkins Deploy</option>
                   <option value="configmap">ConfigMap Env</option>
+                  <option value="checklist">Checklist</option>
                 </select>
               </div>
               <div>
@@ -393,7 +394,8 @@ function StepList({ steps, category, releaseId, onUpdate }: StepListProps) {
                     <input type="hidden" name="content" value={addContent} />
                   </>
                 ) : (
-                  <textarea name="content" className="w-full p-2 border rounded font-mono" rows={6} required />
+                  <textarea name="content" className="w-full p-2 border rounded font-mono" rows={6} required
+                    placeholder={addType === 'checklist' ? 'One checklist item per line' : undefined} />
                 )}
               </div>
               <div>
@@ -540,6 +542,7 @@ function SortableStepItem({ step, index, onDelete, onUpdate }: SortableStepItemP
                 <option value="text">Text</option>
                 <option value="jenkins">Jenkins Deploy</option>
                 <option value="configmap">ConfigMap Env</option>
+                <option value="checklist">Checklist</option>
               </select>
             </div>
             <div>
@@ -550,7 +553,8 @@ function SortableStepItem({ step, index, onDelete, onUpdate }: SortableStepItemP
                   <input type="hidden" name="content" value={editContent} />
                 </>
               ) : (
-                <textarea name="content" defaultValue={step.content} className="w-full p-2 border rounded font-mono" rows={6} required />
+                <textarea name="content" defaultValue={step.content} className="w-full p-2 border rounded font-mono" rows={6} required
+                  placeholder={editType === 'checklist' ? 'One checklist item per line' : undefined} />
               )}
             </div>
             <div>
