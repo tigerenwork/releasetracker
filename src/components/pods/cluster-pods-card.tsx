@@ -50,8 +50,8 @@ export function ClusterPodsCard({ clusterName, customers, releaseId = 0 }: Clust
     }));
   };
 
-  const refreshCustomer = async (customer: ClusterPodsCardProps['customers'][number]) => {
-    if (!agentBridge) return;
+  const refreshCustomer = async (customer: ClusterPodsCardProps['customers'][number]): Promise<boolean> => {
+    if (!agentBridge) return false;
 
     updateState(customer.id, { status: 'loading', error: undefined });
 
@@ -71,18 +71,32 @@ export function ClusterPodsCard({ clusterName, customers, releaseId = 0 }: Clust
           pods: result.pods.items,
           refreshedAt: new Date(),
         });
-      } else {
-        updateState(customer.id, {
-          status: 'error',
-          error: result.error?.message || 'Failed to fetch pods',
-        });
+        return true;
       }
+      updateState(customer.id, {
+        status: 'error',
+        error: result.error?.message || 'Failed to fetch pods',
+      });
+      return false;
     } catch (err) {
       updateState(customer.id, {
         status: 'error',
         error: err instanceof Error ? err.message : 'Unknown error',
       });
+      return false;
     }
+  };
+
+  // Clicking a not-yet-loaded (or failed) row loads its pods and expands on success
+  const handleRowClick = async (customer: ClusterPodsCardProps['customers'][number]) => {
+    const state = states[customer.id];
+    if (state?.status === 'loading') return;
+    if (state?.status === 'loaded' && (state.pods?.length || 0) > 0) {
+      toggleExpanded(customer.id);
+      return;
+    }
+    const ok = await refreshCustomer(customer);
+    if (ok) setExpanded((prev) => ({ ...prev, [customer.id]: true }));
   };
 
   const refreshAll = async () => {
@@ -210,9 +224,9 @@ export function ClusterPodsCard({ clusterName, customers, releaseId = 0 }: Clust
                 <div key={customer.id} className="py-2">
                   <div
                     className={`flex items-center gap-3 rounded-md -mx-2 px-2 py-1 -my-1 ${
-                      hasPods ? 'cursor-pointer hover:bg-slate-50' : ''
+                      state?.status === 'loading' ? '' : 'cursor-pointer hover:bg-slate-50'
                     }`}
-                    onClick={() => hasPods && toggleExpanded(customer.id)}
+                    onClick={() => handleRowClick(customer)}
                   >
                     <span
                       className={`text-slate-400 ${hasPods ? '' : 'opacity-30'}`}
@@ -227,6 +241,22 @@ export function ClusterPodsCard({ clusterName, customers, releaseId = 0 }: Clust
                       <div className="text-sm font-medium">{customer.name}</div>
                       <div className="text-xs text-slate-400 font-mono">{customer.namespace}</div>
                     </div>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      title="Refresh pods"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        refreshCustomer(customer);
+                      }}
+                      disabled={state?.status === 'loading' || isRefreshingAll}
+                    >
+                      {state?.status === 'loading' ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <RefreshCw className="h-4 w-4" />
+                      )}
+                    </Button>
                     <div className="flex-1 min-w-0">{renderSummary(customer.id)}</div>
                     {customer.websiteUrl && (
                       <a
@@ -250,21 +280,6 @@ export function ClusterPodsCard({ clusterName, customers, releaseId = 0 }: Clust
                           : undefined
                       }
                     />
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        refreshCustomer(customer);
-                      }}
-                      disabled={state?.status === 'loading' || isRefreshingAll}
-                    >
-                      {state?.status === 'loading' ? (
-                        <Loader2 className="h-4 w-4 animate-spin" />
-                      ) : (
-                        <RefreshCw className="h-4 w-4" />
-                      )}
-                    </Button>
                   </div>
 
                   {isExpanded && hasPods && (
