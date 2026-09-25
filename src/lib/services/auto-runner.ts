@@ -505,7 +505,9 @@ export async function runCustomerSteps(
     }
 
     if (outcome.ok) {
-      await markStepDone(step.id, 'auto-run');
+      // No note on success — notes are reserved for human highlights, and a
+      // per-step 'auto-run' note would light up the note marker everywhere
+      await markStepDone(step.id);
       executed++;
       hooks.onStepDone?.(customerId, step);
     } else {

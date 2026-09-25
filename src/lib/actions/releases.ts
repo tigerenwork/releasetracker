@@ -236,7 +236,7 @@ export async function cloneRelease(id: number, newName: string) {
     description: `Cloned from: ${original.name}\n\n${original.description || ''}`,
   }).returning();
   
-  // Clone templates
+  // Clone templates (executionConfig carries the auto-run target defaults)
   if (original.templates.length > 0) {
     await db.insert(stepTemplates).values(
       original.templates.map(t => ({
@@ -247,6 +247,7 @@ export async function cloneRelease(id: number, newName: string) {
         content: t.content,
         orderIndex: t.orderIndex,
         description: t.description,
+        executionConfig: t.executionConfig,
       }))
     );
   }
