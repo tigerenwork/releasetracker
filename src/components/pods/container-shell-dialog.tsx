@@ -57,7 +57,7 @@ export function ContainerShellDialog({
     return teardown;
   }, [open, teardown]);
 
-  const connect = async () => {
+  const connect = useCallback(async () => {
     if (!agentBridge || !termRef.current) return;
 
     setErrorMessage(null);
@@ -119,7 +119,20 @@ export function ContainerShellDialog({
       setConnState('error');
       setErrorMessage(message);
     }
-  };
+  }, [kubeContext, namespace, podName, containerName, shell]);
+
+  // Auto-connect with bash as soon as the dialog opens. If it fails, the
+  // error UI below lets the user switch to sh and reconnect manually.
+  const autoConnectDoneRef = useRef(false);
+  useEffect(() => {
+    if (open && !autoConnectDoneRef.current) {
+      autoConnectDoneRef.current = true;
+      connect();
+    }
+    if (!open) {
+      autoConnectDoneRef.current = false;
+    }
+  }, [open, connect]);
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
@@ -145,6 +158,12 @@ export function ContainerShellDialog({
 
         <div className="space-y-3 min-w-0">
           {connState === 'idle' && (
+            <p className="text-xs text-slate-400">
+              {agentBridge ? 'Connecting with bash…' : 'Agent extension not available.'}
+            </p>
+          )}
+
+          {(connState === 'exited' || connState === 'error') && (
             <div className="flex items-center gap-2">
               <select
                 value={shell}
@@ -154,17 +173,9 @@ export function ContainerShellDialog({
                 <option value="bash">bash</option>
                 <option value="sh">sh</option>
               </select>
-              <Button onClick={connect}>
+              <Button variant="outline" size="sm" onClick={() => { teardown(); connect(); }}>
                 <Plug className="h-4 w-4" />
-                <span className="ml-1">Connect</span>
-              </Button>
-            </div>
-          )}
-
-          {(connState === 'exited' || connState === 'error') && (
-            <div className="flex items-center gap-2">
-              <Button variant="outline" size="sm" onClick={() => { teardown(); setConnState('idle'); }}>
-                Reconnect
+                <span className="ml-1">Reconnect</span>
               </Button>
               {errorMessage && <span className="text-xs text-red-600">{errorMessage}</span>}
             </div>
