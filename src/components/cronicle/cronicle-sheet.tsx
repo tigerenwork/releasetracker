@@ -58,9 +58,8 @@ export function CronicleSheet() {
     };
   }, [pathname, clusters.length]);
 
-  // The /cronicle page already shows the panel inline; /login is public.
+  // Show on every page once clusters are known.
   if (!loaded || clusters.length === 0) return null;
-  if (pathname === '/cronicle' || pathname === '/login') return null;
 
   return (
     <Sheet>

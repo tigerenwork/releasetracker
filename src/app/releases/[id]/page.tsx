@@ -12,7 +12,6 @@ import { ReleaseMatrixClient } from '@/components/releases/release-matrix-client
 import { ReleaseActions } from '@/components/releases/release-actions';
 import { ReleaseDescription } from '@/components/releases/release-description';
 import { AutoRunControls } from '@/components/releases/auto-run-controls';
-import { CustomerPodsSheet } from '@/components/pods/customer-pods-sheet';
 
 interface ReleaseDetailPageProps {
   params: Promise<{
@@ -64,15 +63,16 @@ export default async function ReleaseDetailPage({ params }: ReleaseDetailPagePro
 
   const allCustomers = await listCustomers();
 
+  type StepsByCluster = Awaited<ReturnType<typeof getReleaseStepsGroupedByCluster>>;
+
   // Get customer IDs already in this release
-  const existingCustomerIds = Object.values(stepsByCluster).flatMap((clusterData: any) =>
-    Object.values(clusterData.customers as Record<string, { customer: { id: number } }>).map(
-      (c: { customer: { id: number } }) => c.customer.id
+  const existingCustomerIds = Object.values(stepsByCluster as StepsByCluster).flatMap((clusterData) =>
+    Object.values(clusterData.customers).map(
+      (c) => c.customer.id
     )
   );
 
   // Enrolled customers for the auto-run controls (id/name/namespace/cluster only)
-  type StepsByCluster = Awaited<ReturnType<typeof getReleaseStepsGroupedByCluster>>;
   const autoRunCustomers = hasMatrix
     ? Object.values(stepsByCluster as StepsByCluster).flatMap((clusterData) =>
         Object.values(clusterData.customers).map((c) => ({
@@ -214,24 +214,6 @@ export default async function ReleaseDetailPage({ params }: ReleaseDetailPagePro
       {/* Matrix View (active releases; archived shown read-only) */}
       {hasMatrix && (
         <div className="space-y-8">
-          {/* Customer Pods: floating trigger + slide-in sheet so users don't
-              have to scroll away from the matrix to check pod status */}
-          <CustomerPodsSheet
-            releaseId={releaseId}
-            clusters={Object.values(stepsByCluster).map((clusterData: any) => ({
-              key: clusterData.cluster?.id || 'unknown',
-              clusterName: clusterData.cluster?.name || 'Unknown Cluster',
-              customers: Object.values(clusterData.customers as Record<string, { customer: { id: number; name: string; namespace: string; websiteUrl?: string | null } }>).map(
-                (c) => ({
-                  id: c.customer.id,
-                  name: c.customer.name,
-                  namespace: c.customer.namespace,
-                  websiteUrl: c.customer.websiteUrl,
-                })
-              ),
-            }))}
-          />
-
           <div>
             <h2 className="text-lg font-semibold text-slate-800 mb-3">
               Deploy Steps

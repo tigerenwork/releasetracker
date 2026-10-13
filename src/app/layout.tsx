@@ -5,6 +5,7 @@ import { Sidebar } from "@/components/layout/sidebar";
 import { LogsDockProvider } from "@/components/pods/logs-dock-context";
 import { LogsDock } from "@/components/pods/logs-dock";
 import { CronicleSheet } from "@/components/cronicle/cronicle-sheet";
+import { CustomerPodsSheet } from "@/components/pods/customer-pods-sheet";
 import { initDb } from "@/lib/db";
 
 const geistSans = Geist({
@@ -41,8 +42,9 @@ export default function RootLayout({
             <LogsDockProvider>
               {children}
               <LogsDock />
-              {/* Global floating entry so Cronicle tasks can be operated from
-                  any page without navigating to /cronicle */}
+              {/* Global floating entries so pods and Cronicle tasks can be
+                  operated from any page without navigating away */}
+              <CustomerPodsSheet />
               <CronicleSheet />
             </LogsDockProvider>
           </main>
