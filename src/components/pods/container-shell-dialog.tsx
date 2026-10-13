@@ -39,16 +39,21 @@ export function ContainerShellDialog({
   const termRef = useRef<HTMLDivElement>(null);
   const sessionRef = useRef<ShellSession | null>(null);
   const terminalRef = useRef<import('@xterm/xterm').Terminal | null>(null);
+  const resizeObserverRef = useRef<ResizeObserver | null>(null);
+  const openRef = useRef(false);
 
   const teardown = useCallback(() => {
     sessionRef.current?.close();
     sessionRef.current = null;
+    resizeObserverRef.current?.disconnect();
+    resizeObserverRef.current = null;
     terminalRef.current?.dispose();
     terminalRef.current = null;
   }, []);
 
   // Clean up when the dialog closes or the component unmounts
   useEffect(() => {
+    openRef.current = open;
     if (!open) {
       teardown();
       setConnState('idle');
@@ -58,31 +63,42 @@ export function ContainerShellDialog({
   }, [open, teardown]);
 
   const connect = useCallback(async () => {
-    if (!agentBridge || !termRef.current) return;
+    if (!agentBridge) return;
 
     setErrorMessage(null);
 
-    const { Terminal } = await import('@xterm/xterm');
-    const { FitAddon } = await import('@xterm/addon-fit');
-
-    const term = new Terminal({
-      cursorBlink: true,
-      fontSize: 13,
-      fontFamily: 'Menlo, Monaco, "Courier New", monospace',
-      theme: { background: '#020617' },
-    });
-    const fitAddon = new FitAddon();
-    term.loadAddon(fitAddon);
-    term.open(termRef.current);
-    fitAddon.fit();
-
-    terminalRef.current = term;
-
-    // Re-fit when the container resizes (remote shell size is fixed at spawn)
-    const resizeObserver = new ResizeObserver(() => fitAddon.fit());
-    resizeObserver.observe(termRef.current);
-
     try {
+      // The dialog content mounts in a portal; wait a few frames for the
+      // terminal container instead of silently giving up on a null ref.
+      for (let i = 0; i < 30 && !termRef.current; i++) {
+        await new Promise((r) => requestAnimationFrame(r));
+      }
+      if (!openRef.current) return; // dialog closed while waiting
+      const container = termRef.current;
+      if (!container) throw new Error('Terminal container failed to mount');
+
+      const { Terminal } = await import('@xterm/xterm');
+      const { FitAddon } = await import('@xterm/addon-fit');
+      if (!openRef.current) return; // dialog closed while loading xterm
+
+      const term = new Terminal({
+        cursorBlink: true,
+        fontSize: 13,
+        fontFamily: 'Menlo, Monaco, "Courier New", monospace',
+        theme: { background: '#020617' },
+      });
+      const fitAddon = new FitAddon();
+      term.loadAddon(fitAddon);
+      term.open(container);
+      fitAddon.fit();
+
+      terminalRef.current = term;
+
+      // Re-fit when the container resizes (remote shell size is fixed at spawn)
+      const resizeObserver = new ResizeObserver(() => fitAddon.fit());
+      resizeObserver.observe(container);
+      resizeObserverRef.current = resizeObserver;
+
       const session = agentBridge.openShell(
         {
           kubeContext,
@@ -115,7 +131,7 @@ export function ContainerShellDialog({
       setConnState('connected');
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Unknown error';
-      term.write(`\x1b[31m[error: ${message}]\x1b[0m\r\n`);
+      terminalRef.current?.write(`\x1b[31m[error: ${message}]\x1b[0m\r\n`);
       setConnState('error');
       setErrorMessage(message);
     }
