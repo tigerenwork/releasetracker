@@ -279,6 +279,35 @@ export const releaseCustomersRelations = relations(releaseCustomers, ({ one }) =
   customer: one(customers, { fields: [releaseCustomers.customerId], references: [customers.id] }),
 }));
 
+// ==================== Customer Collections ====================
+// Named, reusable sets of customers (e.g. "Service A customers") used to
+// quickly select members when activating a release or adding customers.
+export const customerCollections = sqliteTable('customer_collections', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  name: text('name').notNull(),
+  description: text('description'),
+  isActive: integer('is_active', { mode: 'boolean' }).default(true),
+  createdAt: integer('created_at', { mode: 'timestamp' }).$defaultFn(() => new Date()),
+  updatedAt: integer('updated_at', { mode: 'timestamp' }).$defaultFn(() => new Date()),
+});
+
+export const customerCollectionsRelations = relations(customerCollections, ({ many }) => ({
+  members: many(collectionCustomers),
+}));
+
+export const collectionCustomers = sqliteTable('collection_customers', {
+  collectionId: integer('collection_id').notNull().references(() => customerCollections.id, { onDelete: 'cascade' }),
+  customerId: integer('customer_id').notNull().references(() => customers.id, { onDelete: 'cascade' }),
+  addedAt: integer('added_at', { mode: 'timestamp' }).$defaultFn(() => new Date()),
+}, (table) => ({
+  pk: primaryKey({ columns: [table.collectionId, table.customerId] }),
+}));
+
+export const collectionCustomersRelations = relations(collectionCustomers, ({ one }) => ({
+  collection: one(customerCollections, { fields: [collectionCustomers.collectionId], references: [customerCollections.id] }),
+  customer: one(customers, { fields: [collectionCustomers.customerId], references: [customers.id] }),
+}));
+
 // ==================== Types ====================
 export type Cluster = typeof clusters.$inferSelect;
 export type NewCluster = typeof clusters.$inferInsert;
@@ -303,6 +332,12 @@ export type NewStepExecution = typeof stepExecutions.$inferInsert;
 
 export type ReleaseCustomer = typeof releaseCustomers.$inferSelect;
 export type NewReleaseCustomer = typeof releaseCustomers.$inferInsert;
+
+export type CustomerCollection = typeof customerCollections.$inferSelect;
+export type NewCustomerCollection = typeof customerCollections.$inferInsert;
+
+export type CollectionCustomer = typeof collectionCustomers.$inferSelect;
+export type NewCollectionCustomer = typeof collectionCustomers.$inferInsert;
 
 export type ConfigMapEdit = typeof configMapEdits.$inferSelect;
 export type NewConfigMapEdit = typeof configMapEdits.$inferInsert;

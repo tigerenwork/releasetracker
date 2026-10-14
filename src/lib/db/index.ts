@@ -193,6 +193,26 @@ const CREATE_TABLES_SQL = `
 
   CREATE INDEX IF NOT EXISTS idx_release_customers_release ON release_customers(release_id);
 
+  CREATE TABLE IF NOT EXISTS customer_collections (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL,
+    description TEXT,
+    is_active INTEGER DEFAULT 1,
+    created_at INTEGER DEFAULT (unixepoch() * 1000),
+    updated_at INTEGER DEFAULT (unixepoch() * 1000)
+  );
+
+  CREATE TABLE IF NOT EXISTS collection_customers (
+    collection_id INTEGER NOT NULL,
+    customer_id INTEGER NOT NULL,
+    added_at INTEGER DEFAULT (unixepoch() * 1000),
+    PRIMARY KEY (collection_id, customer_id),
+    FOREIGN KEY (collection_id) REFERENCES customer_collections(id) ON DELETE CASCADE,
+    FOREIGN KEY (customer_id) REFERENCES customers(id) ON DELETE CASCADE
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_collection_customers_collection ON collection_customers(collection_id);
+
   CREATE TABLE IF NOT EXISTS customer_execution_configs (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     customer_id INTEGER NOT NULL,

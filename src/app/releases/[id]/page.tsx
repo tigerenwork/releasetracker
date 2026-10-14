@@ -8,6 +8,7 @@ import { Separator } from '@/components/ui/separator';
 import { getReleaseById } from '@/lib/actions/releases';
 import { getReleaseStepsGroupedByCluster, getStepStats } from '@/lib/actions/customer-steps';
 import { listCustomers } from '@/lib/actions/customers';
+import { listCollections } from '@/lib/actions/customer-collections';
 import { ReleaseMatrixClient } from '@/components/releases/release-matrix-client';
 import { ReleaseActions } from '@/components/releases/release-actions';
 import { ReleaseDescription } from '@/components/releases/release-description';
@@ -61,7 +62,19 @@ export default async function ReleaseDetailPage({ params }: ReleaseDetailPagePro
     ? await getStepStats(releaseId)
     : { total: 0, done: 0, skipped: 0, pending: 0, reverted: 0, percentage: 0 };
 
-  const allCustomers = await listCustomers();
+  const [allCustomers, collections] = await Promise.all([
+    listCustomers(),
+    listCollections(),
+  ]);
+
+  // Collection chips for the activate / add-customer dialogs (active members only)
+  const collectionOptions = collections.map((collection) => ({
+    id: collection.id,
+    name: collection.name,
+    customerIds: collection.members
+      .filter((m) => m.customer?.isActive)
+      .map((m) => m.customerId),
+  }));
 
   type StepsByCluster = Awaited<ReturnType<typeof getReleaseStepsGroupedByCluster>>;
 
@@ -117,6 +130,7 @@ export default async function ReleaseDetailPage({ params }: ReleaseDetailPagePro
             releaseName={release.name || 'Untitled Release'}
             releaseStatus={release.status || 'draft'}
             allCustomers={allCustomers}
+            collections={collectionOptions}
             existingCustomerIds={existingCustomerIds}
           />
         </div>

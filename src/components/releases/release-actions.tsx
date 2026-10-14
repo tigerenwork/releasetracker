@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button';
 import { ActivateReleaseDialog } from './activate-release-dialog';
 import { AddCustomerDialog } from './add-customer-dialog';
 import { activateRelease, addCustomersToRelease } from '@/lib/actions/releases';
+import type { CollectionOption } from '@/components/customers/customer-multi-picker';
 import { useRouter } from 'next/navigation';
 
 interface CustomerWithCluster {
@@ -23,6 +24,7 @@ interface ReleaseActionsProps {
   releaseName: string;
   releaseStatus: string;
   allCustomers: CustomerWithCluster[];
+  collections?: CollectionOption[];
   // Customers already in the release (for active releases)
   existingCustomerIds?: number[];
 }
@@ -32,6 +34,7 @@ export function ReleaseActions({
   releaseName,
   releaseStatus,
   allCustomers,
+  collections,
   existingCustomerIds = []
 }: ReleaseActionsProps) {
   const router = useRouter();
@@ -97,6 +100,7 @@ export function ReleaseActions({
           releaseId={releaseId}
           releaseName={releaseName}
           customers={allCustomers}
+          collections={collections}
           isOpen={isActivateDialogOpen}
           onClose={() => setIsActivateDialogOpen(false)}
           onActivate={handleActivate}
@@ -132,6 +136,7 @@ export function ReleaseActions({
           releaseId={releaseId}
           releaseName={releaseName}
           availableCustomers={availableCustomers}
+          collections={collections}
           isOpen={isAddCustomerDialogOpen}
           onClose={() => setIsAddCustomerDialogOpen(false)}
           onAdd={handleAddCustomers}
