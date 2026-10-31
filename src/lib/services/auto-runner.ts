@@ -3,8 +3,8 @@
  *
  * Runs one customer's steps sequentially (deploy category first, then verify),
  * and multiple customers in parallel via a simple promise pool. k8s-backed step
- * types (bash/sql/script/rest/configmap) go through the browser extension
- * bridge to the local agent; jenkins steps run through the server actions.
+ * types (bash/sql/script/rest/configmap/jenkins) go through the browser
+ * extension bridge to the local agent. Jenkins credentials stay on the agent.
  *
  * Run policy:
  *  - a failed step marks the step 'failed' and stops that customer's run;
@@ -31,7 +31,13 @@ import {
   getLastScriptExecution,
   saveScriptExecution,
 } from '@/lib/actions/step-executions';
-import { triggerDeploy, getDeployStatus, getLastDeploy } from '@/lib/actions/jenkins';
+import {
+  getCustomerJenkinsConfig,
+  getLastDeploy,
+  recordJenkinsDeploy,
+  updateJenkinsDeployStatus,
+} from '@/lib/actions/jenkins';
+import { triggerJenkinsBuild, pollDeployStatus } from '@/lib/jenkins/browser';
 import type { StepType } from '@/lib/db/schema';
 
 export type RunPlan = Awaited<ReturnType<typeof getCustomerRunPlan>>;
@@ -351,19 +357,58 @@ async function runJenkins(
   target: ResolvedTarget,
   control: RunControl
 ): Promise<{ ok: boolean; error?: string }> {
+  if (!agentBridge) return { ok: false, error: 'Agent bridge unavailable (not in a browser)' };
+
+  const mapping = await getCustomerJenkinsConfig(plan.customer.id);
+  if (!mapping || (!mapping.view && !mapping.job)) {
+    return {
+      ok: false,
+      error: 'No Jenkins view or job is mapped to this customer. Configure it on the customer edit page.',
+    };
+  }
+
   const deployStartedAt = Date.now();
-  const { executionId } = await triggerDeploy(step.id, target.jenkinsService!, target.jenkinsBranch ?? '');
+  let triggered;
+  try {
+    triggered = await triggerJenkinsBuild(
+      mapping,
+      target.jenkinsService!,
+      target.jenkinsBranch ?? ''
+    );
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : 'Failed to trigger Jenkins deploy' };
+  }
+
+  const { executionId } = await recordJenkinsDeploy({
+    customerStepId: step.id,
+    service: target.jenkinsService!,
+    branch: target.jenkinsBranch ?? '',
+    jobPath: triggered.jobPath,
+    buildParams: triggered.buildParams,
+    queueUrl: triggered.queueUrl,
+  });
+
+  let meta: { queueUrl?: string; buildUrl?: string } = { queueUrl: triggered.queueUrl };
   const deadline = Date.now() + JENKINS_MAX_WAIT_MS;
 
   while (Date.now() < deadline) {
     if (control.cancelled) return { ok: false, error: 'Cancelled' };
     await sleep(JENKINS_POLL_INTERVAL_MS);
-    const status = await getDeployStatus(executionId);
-    if (status.state === 'completed') {
-      return waitForRollout(plan, step, target, control, deployStartedAt);
-    }
-    if (status.state === 'failed') {
-      return { ok: false, error: `Jenkins build failed${status.result ? `: ${status.result}` : ''}` };
+    try {
+      const status = await pollDeployStatus(meta);
+      meta = {
+        queueUrl: status.queueUrl || meta.queueUrl,
+        buildUrl: status.buildUrl || meta.buildUrl,
+      };
+      await updateJenkinsDeployStatus(executionId, status).catch(() => {});
+      if (status.state === 'completed') {
+        return waitForRollout(plan, step, target, control, deployStartedAt);
+      }
+      if (status.state === 'failed') {
+        return { ok: false, error: `Jenkins build failed${status.result ? `: ${status.result}` : ''}` };
+      }
+    } catch (err) {
+      return { ok: false, error: err instanceof Error ? err.message : 'Failed to poll Jenkins build' };
     }
   }
   return { ok: false, error: 'Timed out waiting for the Jenkins build to finish' };

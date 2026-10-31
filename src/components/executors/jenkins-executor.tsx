@@ -15,13 +15,18 @@ import {
 } from '@/components/ui/select';
 import { Loader2, Play, CheckCircle, XCircle, ExternalLink } from 'lucide-react';
 import {
+  getCustomerJenkinsConfig,
+  recordJenkinsDeploy,
+  updateJenkinsDeployStatus,
+  getLastDeploy,
+} from '@/lib/actions/jenkins';
+import {
   listServices,
   getDeployParams,
-  triggerDeploy,
-  getDeployStatus,
-  getLastDeploy,
+  triggerJenkinsBuild,
+  pollDeployStatus,
   type DeployStatus,
-} from '@/lib/actions/jenkins';
+} from '@/lib/jenkins/browser';
 import { JenkinsPodsPanel } from '@/components/executors/jenkins-pods-panel';
 
 interface JenkinsExecutorProps {
@@ -46,17 +51,23 @@ export function JenkinsExecutor({ customerStepId, customerId, namespace, kubeCon
   const [status, setStatus] = useState<DeployStatus | null>(null);
   const [deployError, setDeployError] = useState<string | null>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  // Branch of the restored last deploy, applied once the branch param loads
+  const metaRef = useRef<{ queueUrl?: string; buildUrl?: string }>({});
   const restoredBranchRef = useRef<string | null>(null);
+  const mappingRef = useRef<Awaited<ReturnType<typeof getCustomerJenkinsConfig>>>(null);
 
   // Load services and restore the last deploy (persisted in step_executions)
   useEffect(() => {
     (async () => {
       try {
-        const [list, last] = await Promise.all([
-          listServices(customerId),
+        const [mapping, last] = await Promise.all([
+          getCustomerJenkinsConfig(customerId),
           getLastDeploy(customerStepId).catch(() => null),
         ]);
+        if (!mapping || (!mapping.view && !mapping.job)) {
+          throw new Error('No Jenkins view or job is mapped to this customer. Configure it on the customer edit page.');
+        }
+        mappingRef.current = mapping;
+        const list = await listServices(mapping);
         setServices(list);
         if (last?.service && list.includes(last.service)) {
           restoredBranchRef.current = last.branch;
@@ -74,7 +85,10 @@ export function JenkinsExecutor({ customerStepId, customerId, namespace, kubeCon
             buildUrl: last.buildUrl || undefined,
             duration: last.duration ?? undefined,
           });
-          // A deploy left in flight when the panel was closed — resume tracking it
+          metaRef.current = {
+            queueUrl: last.queueUrl || undefined,
+            buildUrl: last.buildUrl || undefined,
+          };
           if (last.state === 'running') startPolling(last.executionId);
         }
       } catch (err) {
@@ -84,14 +98,13 @@ export function JenkinsExecutor({ customerStepId, customerId, namespace, kubeCon
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [customerId, customerStepId]);
 
-  // Load the branch parameter whenever the selected service changes
   useEffect(() => {
-    if (!service) return;
+    if (!service || !mappingRef.current) return;
     setBranchChoices(null);
     setBranchType(null);
     setBranchError(null);
     setBranch('');
-    getDeployParams(customerId, service)
+    getDeployParams(mappingRef.current, service)
       .then((params) => {
         setBranchChoices(params.choices);
         setBranchType(params.type);
@@ -99,13 +112,11 @@ export function JenkinsExecutor({ customerStepId, customerId, namespace, kubeCon
         restoredBranchRef.current = null;
       })
       .catch((err) => {
-        // Fall back to free-text branch entry, but surface why choices failed to load
         setBranchChoices(null);
         setBranchError(err instanceof Error ? err.message : 'Failed to load branch parameter');
       });
   }, [customerId, service]);
 
-  // Stop polling when the component unmounts
   useEffect(() => {
     return () => {
       if (pollRef.current) clearInterval(pollRef.current);
@@ -116,8 +127,13 @@ export function JenkinsExecutor({ customerStepId, customerId, namespace, kubeCon
     const startedAt = Date.now();
     pollRef.current = setInterval(async () => {
       try {
-        const next = await getDeployStatus(executionId);
+        const next = await pollDeployStatus(metaRef.current);
+        metaRef.current = {
+          queueUrl: next.queueUrl || metaRef.current.queueUrl,
+          buildUrl: next.buildUrl || metaRef.current.buildUrl,
+        };
         setStatus(next);
+        await updateJenkinsDeployStatus(executionId, next).catch(() => {});
         if (next.state === 'completed' || next.state === 'failed' || Date.now() - startedAt > POLL_TIMEOUT_MS) {
           if (pollRef.current) clearInterval(pollRef.current);
           pollRef.current = null;
@@ -131,12 +147,22 @@ export function JenkinsExecutor({ customerStepId, customerId, namespace, kubeCon
   };
 
   const handleDeploy = async () => {
+    if (!mappingRef.current) return;
     setIsDeploying(true);
     setDeployError(null);
     setStatus(null);
 
     try {
-      const { executionId } = await triggerDeploy(customerStepId, service, branch);
+      const triggered = await triggerJenkinsBuild(mappingRef.current, service, branch);
+      const { executionId } = await recordJenkinsDeploy({
+        customerStepId,
+        service,
+        branch,
+        jobPath: triggered.jobPath,
+        buildParams: triggered.buildParams,
+        queueUrl: triggered.queueUrl,
+      });
+      metaRef.current = { queueUrl: triggered.queueUrl };
       setStatus({ state: 'queued' });
       startPolling(executionId);
     } catch (err) {
@@ -179,7 +205,7 @@ export function JenkinsExecutor({ customerStepId, customerId, namespace, kubeCon
         {!loadError && services === null && (
           <div className="flex items-center gap-2 text-sm text-slate-500">
             <Loader2 className="h-4 w-4 animate-spin" />
-            Loading services from Jenkins...
+            Loading services from Jenkins via local agent...
           </div>
         )}
 

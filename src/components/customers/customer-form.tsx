@@ -15,7 +15,8 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { createCustomer, updateCustomer } from '@/lib/actions/customers';
-import { updateCustomerJenkinsConfig, listServices } from '@/lib/actions/jenkins';
+import { updateCustomerJenkinsConfig, getCustomerJenkinsConfig } from '@/lib/actions/jenkins';
+import { listServices } from '@/lib/jenkins/browser';
 import { Plus, Trash2 } from 'lucide-react';
 import type { Customer, Cluster } from '@/lib/db/schema';
 
@@ -45,11 +46,21 @@ export function CustomerForm({ customer, clusters, jenkinsConfig, isEdit = false
   const [services, setServices] = useState<string[]>([]);
 
   // Load the deployable services so the mapping rows can offer a dropdown
+  // (Jenkins is reached via the local agent — extension must be connected)
   useEffect(() => {
     if (!isEdit || !customer) return;
-    listServices(customer.id)
-      .then(setServices)
-      .catch(() => setServices([]));
+    (async () => {
+      try {
+        const mapping = await getCustomerJenkinsConfig(customer.id);
+        if (!mapping || (!mapping.view && !mapping.job)) {
+          setServices([]);
+          return;
+        }
+        setServices(await listServices(mapping));
+      } catch {
+        setServices([]);
+      }
+    })();
   }, [isEdit, customer]);
 
   async function handleSubmit(formData: FormData) {

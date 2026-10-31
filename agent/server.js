@@ -11,6 +11,7 @@
  * - pods: List pods with status details
  * - restart: Restart a pod by deleting it (controller recreates it)
  * - config: View/edit ConfigMaps consumed by a Deployment
+ * - jenkins: Settings + outbound proxy to a Jenkins reachable from this machine
  * 
  * Usage:
  *   AGENT_TOKEN=your-token node server.js
@@ -30,6 +31,7 @@ const { PodsExecutor } = require('./src/executors/pods');
 const { ConfigExecutor } = require('./src/executors/config');
 const { LogsExecutor } = require('./src/executors/logs');
 const { PortForwardManager } = require('./src/executors/portforward');
+const jenkins = require('./src/jenkins');
 const shell = require('./src/shell');
 const { loadConfig } = require('./src/config');
 const { version: VERSION } = require('./package.json');
@@ -115,6 +117,24 @@ const server = http.createServer((req, res) => {
   }
   if (url.pathname.startsWith('/api/v1/portforward/') && req.method === 'DELETE') {
     handlePortForwardStop(req, res);
+    return;
+  }
+
+  // Jenkins settings + request proxy (credentials stored on this machine only)
+  if (url.pathname === '/api/v1/settings/jenkins' && req.method === 'GET') {
+    handleJenkinsSettingsGet(req, res);
+    return;
+  }
+  if (url.pathname === '/api/v1/settings/jenkins' && req.method === 'PUT') {
+    handleJenkinsSettingsPut(req, res);
+    return;
+  }
+  if (url.pathname === '/api/v1/settings/jenkins/test' && req.method === 'POST') {
+    handleJenkinsSettingsTest(req, res);
+    return;
+  }
+  if (url.pathname === '/api/v1/jenkins/request' && req.method === 'POST') {
+    handleJenkinsRequest(req, res);
     return;
   }
 
@@ -367,6 +387,76 @@ function handlePortForwardStop(req, res) {
   }
 }
 
+function readJsonBody(req) {
+  return new Promise((resolve, reject) => {
+    let body = '';
+    req.on('data', (chunk) => { body += chunk; });
+    req.on('end', () => {
+      try {
+        resolve(body ? JSON.parse(body) : {});
+      } catch (err) {
+        reject(new Error('Invalid JSON body'));
+      }
+    });
+    req.on('error', reject);
+  });
+}
+
+function handleJenkinsSettingsGet(req, res) {
+  if (!checkToken(req, res)) return;
+  res.writeHead(200, { 'Content-Type': 'application/json' });
+  res.end(JSON.stringify(jenkins.publicJenkinsSettings()));
+}
+
+async function handleJenkinsSettingsPut(req, res) {
+  if (!checkToken(req, res)) return;
+  try {
+    const data = await readJsonBody(req);
+    const settings = jenkins.updateJenkinsSettings(data);
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ success: true, settings }));
+  } catch (err) {
+    logger.error('[Jenkins] Save settings failed:', err.message);
+    res.writeHead(400, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ success: false, error: { message: err.message } }));
+  }
+}
+
+async function handleJenkinsSettingsTest(req, res) {
+  if (!checkToken(req, res)) return;
+  try {
+    const result = await jenkins.testJenkinsConnection();
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify(result));
+  } catch (err) {
+    logger.error('[Jenkins] Test failed:', err.message);
+    res.writeHead(400, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ success: false, error: { message: err.message } }));
+  }
+}
+
+async function handleJenkinsRequest(req, res) {
+  if (!checkToken(req, res)) return;
+  try {
+    const data = await readJsonBody(req);
+    if (!data.path) {
+      res.writeHead(400, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'Missing path' }));
+      return;
+    }
+    const result = await jenkins.jenkinsRequest(data);
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify(result));
+  } catch (err) {
+    logger.error('[Jenkins] Request failed:', err.message);
+    res.writeHead(400, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({
+      success: false,
+      error: { code: 'JENKINS_REQUEST_FAILED', message: err.message },
+    }));
+  }
+}
+
 // Preflight check: verify kubectl is on PATH (runs once at startup)
 function checkKubectl() {
   const { spawn } = require('child_process');
@@ -399,7 +489,7 @@ server.listen(PORT, HOST, () => {
 ╚════════════════════════════════════════════════════════╝
   `);
   logger.info('Agent started and ready for connections');
-  logger.info('Supported execution types: sql, rest, script, pods, restart, config, portforward');
+  logger.info('Supported execution types: sql, rest, script, pods, restart, config, portforward, jenkins');
   checkKubectl();
 });
 

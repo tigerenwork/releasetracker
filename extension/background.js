@@ -206,6 +206,18 @@ async function handleMessage(request) {
     case 'proxyRequest':
       return await proxyRequestCommand(request.params);
 
+    case 'jenkinsSettingsGet':
+      return await jenkinsAgentCommand('GET', '/api/v1/settings/jenkins');
+
+    case 'jenkinsSettingsPut':
+      return await jenkinsAgentCommand('PUT', '/api/v1/settings/jenkins', request.settings);
+
+    case 'jenkinsSettingsTest':
+      return await jenkinsAgentCommand('POST', '/api/v1/settings/jenkins/test');
+
+    case 'jenkinsRequest':
+      return await jenkinsAgentCommand('POST', '/api/v1/jenkins/request', request.params);
+
     case 'updateSettings':
       connectionState.agentUrl = request.agentUrl || connectionState.agentUrl;
       connectionState.token = request.token || connectionState.token;
@@ -357,6 +369,53 @@ async function portForwardCommand(op, params) {
   }
 
   const data = await response.json();
+  return { success: true, data };
+}
+
+/**
+ * Authenticated call to the local agent (Jenkins settings / request proxy).
+ * Jenkins credentials stay on the agent; the page never sees the API token.
+ */
+async function jenkinsAgentCommand(method, path, body) {
+  await ensureSettings();
+
+  if (!connectionState.connected) {
+    await checkConnection();
+  }
+  if (!connectionState.connected) {
+    throw new Error('Agent not connected. Is rt-agent running?');
+  }
+  if (!connectionState.token) {
+    throw new Error('Agent token not configured. Save it in the extension popup.');
+  }
+
+  const response = await fetch(`${connectionState.agentUrl}${path}`, {
+    method,
+    headers: {
+      'Content-Type': 'application/json',
+      'X-Agent-Token': connectionState.token,
+    },
+    body: body !== undefined ? JSON.stringify(body) : undefined,
+  });
+
+  const text = await response.text();
+  let data;
+  try {
+    data = text ? JSON.parse(text) : {};
+  } catch {
+    data = { error: text };
+  }
+
+  if (!response.ok) {
+    const message =
+      data?.error?.message ||
+      data?.error ||
+      (response.status === 401
+        ? 'Authentication failed. Check your agent token.'
+        : `Agent error (${response.status})`);
+    throw new Error(typeof message === 'string' ? message : JSON.stringify(message));
+  }
+
   return { success: true, data };
 }
 

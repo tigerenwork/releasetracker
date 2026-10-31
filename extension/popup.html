@@ -12,7 +12,9 @@
     }
     
     body {
-      width: 280px;
+      width: 300px;
+      max-height: 560px;
+      overflow-y: auto;
       padding: 16px;
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
       font-size: 14px;
@@ -197,8 +199,31 @@
     <div id="message" class="hidden"></div>
     
     <p class="info-text">
-      The token must match the AGENT_TOKEN environment variable set when starting the agent.
+      The token must match the agent auth token (run <code>rt-agent token</code>).
     </p>
+  </div>
+
+  <div class="section">
+    <div class="section-title">Jenkins</div>
+    <p class="info-text" style="margin-top: 0; margin-bottom: 10px;">
+      Stored on the local agent only (needed when Jenkins is behind Netbird). Token is never sent to the web server.
+    </p>
+    <div class="status-row">
+      <span class="status-label">Status:</span>
+      <span class="status-value" id="jenkinsStatus">—</span>
+    </div>
+    <label for="jenkinsBaseUrl">Base URL</label>
+    <input type="text" id="jenkinsBaseUrl" placeholder="https://jenkins.example.com">
+
+    <label for="jenkinsUsername">Username</label>
+    <input type="text" id="jenkinsUsername" placeholder="deploy-bot">
+
+    <label for="jenkinsApiToken">API Token</label>
+    <input type="password" id="jenkinsApiToken" placeholder="Jenkins API token">
+
+    <button class="btn-primary" id="jenkinsSaveBtn">Save to Agent</button>
+    <button class="btn-secondary" id="jenkinsTestBtn">Test Jenkins</button>
+    <div id="jenkinsMessage" class="hidden"></div>
   </div>
   
   <script src="popup.js"></script>

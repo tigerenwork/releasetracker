@@ -39,7 +39,12 @@ Precedence: environment variable → `~/.config/rt-agent/config.json` → defaul
 | `host` | `AGENT_HOST` | `127.0.0.1` |
 | `port` | `AGENT_PORT` | `3456` |
 | `token` | `AGENT_TOKEN` | generated on first run |
+| `jenkins` | — | set via extension popup (`baseUrl`, `username`, `apiToken`) |
 | — | `LOG_LEVEL` | `info` |
+
+Jenkins credentials are stored only in the agent config file (mode `0600`).
+Configure them from the browser extension popup — the Release Tracker server
+never sees the API token.
 
 ## API
 
@@ -50,6 +55,10 @@ Precedence: environment variable → `~/.config/rt-agent/config.json` → defaul
 - `GET /api/v1/portforward` — list active port-forward proxies
 - `POST /api/v1/portforward` — start a proxy (`{ kubeContext?, namespace, resource, localPort, remotePort }`)
 - `DELETE /api/v1/portforward/:id` — stop a proxy
+- `GET /api/v1/settings/jenkins` — public Jenkins settings (`configured`, `baseUrl`, `username`, `hasApiToken`)
+- `PUT /api/v1/settings/jenkins` — save Jenkins settings (`baseUrl`, `username`, `apiToken?`)
+- `POST /api/v1/settings/jenkins/test` — probe Jenkins `/api/json` with stored credentials
+- `POST /api/v1/jenkins/request` — outbound Jenkins HTTP proxy (`{ path, method?, headers?, body?, timeoutMs? }`); agent injects Basic auth
 
 All endpoints except `/health` require the `X-Agent-Token` header (or `?token=`
 for the WebSocket).

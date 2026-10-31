@@ -346,6 +346,122 @@
       },
 
       /**
+       * Outbound Jenkins request via the local agent (agent injects credentials).
+       * params: { path, method?, headers?, body?, timeoutMs? }
+       * Resolves to { status, headers, body }.
+       */
+      async jenkinsRequest(params) {
+        return new Promise((resolve, reject) => {
+          const id = generateId();
+          const timeout = setTimeout(() => {
+            pendingRequests.delete(id);
+            reject(new Error('Jenkins request timeout'));
+          }, (params.timeoutMs || 15000) + 5000);
+
+          const handler = (event) => {
+            if (event.source !== window) return;
+            if (event.data?.type !== 'RT_JENKINS_RESPONSE') return;
+            if (event.data.id !== id) return;
+
+            clearTimeout(timeout);
+            window.removeEventListener('message', handler);
+            pendingRequests.delete(id);
+
+            if (event.data.success) {
+              resolve(event.data.result);
+            } else {
+              reject(new Error(event.data.error || 'Jenkins request failed'));
+            }
+          };
+
+          window.addEventListener('message', handler);
+          pendingRequests.set(id, { handler, timeout });
+
+          window.postMessage({
+            type: 'RT_JENKINS_REQUEST',
+            id: id,
+            payload: params
+          }, '*');
+        });
+      },
+
+      /**
+       * Read public Jenkins settings from the agent (never includes the API token).
+       */
+      async getJenkinsSettings() {
+        return new Promise((resolve, reject) => {
+          const id = generateId();
+          const timeout = setTimeout(() => {
+            pendingRequests.delete(id);
+            reject(new Error('Jenkins settings timeout'));
+          }, 10000);
+
+          const handler = (event) => {
+            if (event.source !== window) return;
+            if (event.data?.type !== 'RT_JENKINS_SETTINGS_RESPONSE') return;
+            if (event.data.id !== id) return;
+
+            clearTimeout(timeout);
+            window.removeEventListener('message', handler);
+            pendingRequests.delete(id);
+
+            if (event.data.success) {
+              resolve(event.data.result);
+            } else {
+              reject(new Error(event.data.error || 'Failed to load Jenkins settings'));
+            }
+          };
+
+          window.addEventListener('message', handler);
+          pendingRequests.set(id, { handler, timeout });
+
+          window.postMessage({
+            type: 'RT_JENKINS_SETTINGS',
+            id: id,
+            payload: { op: 'get' }
+          }, '*');
+        });
+      },
+
+      /**
+       * Test Jenkins connectivity using credentials stored on the agent.
+       */
+      async testJenkinsConnection() {
+        return new Promise((resolve, reject) => {
+          const id = generateId();
+          const timeout = setTimeout(() => {
+            pendingRequests.delete(id);
+            reject(new Error('Jenkins test timeout'));
+          }, 20000);
+
+          const handler = (event) => {
+            if (event.source !== window) return;
+            if (event.data?.type !== 'RT_JENKINS_SETTINGS_RESPONSE') return;
+            if (event.data.id !== id) return;
+
+            clearTimeout(timeout);
+            window.removeEventListener('message', handler);
+            pendingRequests.delete(id);
+
+            if (event.data.success) {
+              resolve(event.data.result);
+            } else {
+              reject(new Error(event.data.error || 'Jenkins connection test failed'));
+            }
+          };
+
+          window.addEventListener('message', handler);
+          pendingRequests.set(id, { handler, timeout });
+
+          window.postMessage({
+            type: 'RT_JENKINS_SETTINGS',
+            id: id,
+            payload: { op: 'test' }
+          }, '*');
+        });
+      },
+
+      /**
        * Simple ping to test connectivity
        */
       async ping() {

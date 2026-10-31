@@ -121,6 +121,61 @@ window.addEventListener('message', async (event) => {
       break;
     }
 
+    case 'RT_JENKINS_REQUEST': {
+      try {
+        const result = await chrome.runtime.sendMessage({
+          action: 'jenkinsRequest',
+          params: event.data.payload
+        });
+
+        window.postMessage({
+          type: 'RT_JENKINS_RESPONSE',
+          id: event.data.id,
+          success: result.success,
+          result: result.data,
+          error: result.error
+        }, '*');
+      } catch (err) {
+        window.postMessage({
+          type: 'RT_JENKINS_RESPONSE',
+          id: event.data.id,
+          success: false,
+          error: err.message
+        }, '*');
+      }
+      break;
+    }
+
+    case 'RT_JENKINS_SETTINGS': {
+      try {
+        const op = event.data.payload?.op;
+        let result;
+        if (op === 'get') {
+          result = await chrome.runtime.sendMessage({ action: 'jenkinsSettingsGet' });
+        } else if (op === 'test') {
+          result = await chrome.runtime.sendMessage({ action: 'jenkinsSettingsTest' });
+        } else {
+          throw new Error(`Unknown jenkins settings op: ${op}`);
+        }
+
+        window.postMessage({
+          type: 'RT_JENKINS_SETTINGS_RESPONSE',
+          id: event.data.id,
+          success: result.success,
+          result: result.data,
+          error: result.error
+        }, '*');
+      } catch (err) {
+        window.postMessage({
+          type: 'RT_JENKINS_SETTINGS_RESPONSE',
+          id: event.data.id,
+          success: false,
+          error: err.message
+        }, '*');
+      }
+      break;
+    }
+
     case 'RT_EXECUTE_STREAM': {
       const port = chrome.runtime.connect({ name: 'rt-stream' });
       streamPorts.set(event.data.id, port);

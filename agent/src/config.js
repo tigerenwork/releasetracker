@@ -23,13 +23,17 @@ function saveConfig(cfg) {
   fs.writeFileSync(CONFIG_FILE, JSON.stringify(cfg, null, 2) + '\n', { mode: 0o600 });
 }
 
-function loadConfig() {
-  let fileConfig = {};
+/** Raw JSON from the config file (empty object when missing/invalid). */
+function readFileConfig() {
   try {
-    fileConfig = JSON.parse(fs.readFileSync(CONFIG_FILE, 'utf8'));
+    return JSON.parse(fs.readFileSync(CONFIG_FILE, 'utf8'));
   } catch {
-    // Missing or invalid config file — start fresh
+    return {};
   }
+}
+
+function loadConfig() {
+  const fileConfig = readFileConfig();
 
   // First run: generate a per-user token and persist it
   if (!fileConfig.token && !process.env.AGENT_TOKEN) {
@@ -45,7 +49,8 @@ function loadConfig() {
     host: process.env.AGENT_HOST || fileConfig.host || '127.0.0.1',
     port: parseInt(process.env.AGENT_PORT || fileConfig.port || '3456', 10),
     token: process.env.AGENT_TOKEN || fileConfig.token || null,
+    jenkins: fileConfig.jenkins || null,
   };
 }
 
-module.exports = { loadConfig, saveConfig, CONFIG_DIR, CONFIG_FILE };
+module.exports = { loadConfig, saveConfig, readFileConfig, CONFIG_DIR, CONFIG_FILE };

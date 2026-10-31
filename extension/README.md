@@ -26,10 +26,11 @@ Browser extension that bridges the Release Tracker web app to the local agent.
 ### Configuration
 
 1. Click extension icon in toolbar
-2. Enter Agent URL (default: `http://localhost:3456`)
-3. Enter Auth Token (default: `poc-token-123`)
-4. Click "Save Settings"
-5. Click "Test Connection" to verify
+2. Enter Agent URL (default: `http://127.0.0.1:3456`)
+3. Enter Auth Token (`rt-agent token`)
+4. Click "Save Settings" → "Test Connection"
+5. Under **Jenkins**, enter Base URL / username / API token → "Save to Agent"
+   (credentials stay on the local agent for Netbird access; never sent to the web server)
 
 ## Architecture
 

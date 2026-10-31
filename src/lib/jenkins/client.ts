@@ -1,10 +1,21 @@
-// Server-only Jenkins API client. Only import from server code (server actions).
-import { db } from '@/lib/db';
+/**
+ * Jenkins API helpers (transport-agnostic).
+ *
+ * Outbound HTTP is injected by the caller — the browser uses the local agent
+ * (Netbird-capable Mac); the server no longer talks to Jenkins directly.
+ */
 
-export type JenkinsConfig = {
-  baseUrl: string;
-  username: string;
-  apiToken: string;
+export type JenkinsTransportResponse = {
+  status: number;
+  headers: Record<string, string>;
+  body: string;
+};
+
+export type JenkinsTransport = {
+  fetch(
+    path: string,
+    init?: { method?: string; headers?: Record<string, string>; body?: string; timeoutMs?: number }
+  ): Promise<JenkinsTransportResponse>;
 };
 
 export type JenkinsJob = {
@@ -19,38 +30,25 @@ export type JenkinsParameter = {
   default?: string;
 };
 
-const REQUEST_TIMEOUT_MS = 15000;
+export type DeployStatus = {
+  state: 'queued' | 'running' | 'completed' | 'failed';
+  result?: string | null;
+  buildUrl?: string;
+  duration?: number;
+};
 
-// Resolve connection settings: DB settings row first, env vars as fallback
-export async function resolveJenkinsConfig(): Promise<JenkinsConfig> {
-  const row = await db.query.jenkinsSettings.findFirst();
-
-  const baseUrl = row?.baseUrl || process.env.JENKINS_URL;
-  const username = row?.username || process.env.JENKINS_USER || '';
-  const apiToken = row?.apiToken || process.env.JENKINS_TOKEN;
-
-  if (!baseUrl || !apiToken) {
-    throw new Error('Jenkins is not configured. Set it up on the /jenkins settings page (or JENKINS_URL/JENKINS_TOKEN env vars).');
-  }
-
-  return { baseUrl: baseUrl.replace(/\/+$/, ''), username, apiToken };
-}
-
-async function jenkinsFetch(config: JenkinsConfig, path: string, init?: RequestInit): Promise<Response> {
-  const auth = Buffer.from(`${config.username}:${config.apiToken}`).toString('base64');
-  // Absolute URLs (e.g. the queue/build URLs Jenkins returns in the Location
-  // header and api responses) are used as-is; relative paths get the base URL
-  const url = /^https?:\/\//i.test(path) ? path : `${config.baseUrl}${path}`;
-  const res = await fetch(url, {
-    ...init,
-    headers: {
-      Authorization: `Basic ${auth}`,
-      ...(init?.headers || {}),
-    },
-    signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
-  });
-  if (!res.ok) {
-    throw new Error(`Jenkins request failed: ${res.status} ${res.statusText} (${path})`);
+async function jenkinsFetch(
+  transport: JenkinsTransport,
+  path: string,
+  init?: { method?: string; headers?: Record<string, string>; body?: string; timeoutMs?: number }
+): Promise<JenkinsTransportResponse> {
+  const res = await transport.fetch(path, init);
+  if (res.status < 200 || res.status >= 300) {
+    // 201/302 from buildWithParameters still need Location — treat 3xx as ok when Location present
+    if (res.status >= 300 && res.status < 400 && (res.headers.location || res.headers.Location)) {
+      return res;
+    }
+    throw new Error(`Jenkins request failed: ${res.status} (${path})`);
   }
   return res;
 }
@@ -64,9 +62,7 @@ export function encodeJobPath(jobPath: string): string {
     .join('');
 }
 
-// Derive a job path ('a/b') back from a full job URL or path. Extracts every
-// /job/<name> segment so it works regardless of context path, view prefixes,
-// or a missing leading slash: 'https://h/job/a/job/b/' -> 'a/b'
+// Derive a job path ('a/b') back from a full job URL or path.
 export function jobPathFromUrl(url: string): string {
   let pathname = url;
   try {
@@ -83,8 +79,6 @@ export function jobPathFromUrl(url: string): string {
   return segments.join('/');
 }
 
-// Normalize user-entered job identifiers: full URLs and 'job/a/job/b' paths
-// become 'a/b'; plain 'a/b' paths pass through (trimmed of slashes)
 export function normalizeJobPath(input: string): string {
   const trimmed = input.trim().replace(/\/+$/, '');
   if (/^https?:\/\//i.test(trimmed) || /(^|\/)job\//.test(trimmed)) {
@@ -93,25 +87,35 @@ export function normalizeJobPath(input: string): string {
   return trimmed.replace(/^\/+/, '');
 }
 
-export async function testConnection(config?: JenkinsConfig) {
-  const cfg = config || (await resolveJenkinsConfig());
-  const res = await jenkinsFetch(cfg, '/api/json');
-  const data = await res.json();
-  return { ok: true as const, nodeName: data.nodeName as string | undefined, version: res.headers.get('x-jenkins') || undefined };
+export async function testConnection(transport: JenkinsTransport) {
+  const res = await jenkinsFetch(transport, '/api/json');
+  const data = JSON.parse(res.body);
+  return {
+    ok: true as const,
+    nodeName: data.nodeName as string | undefined,
+    version: res.headers['x-jenkins'] || undefined,
+  };
 }
 
-export async function listJobs(viewName: string, config?: JenkinsConfig): Promise<JenkinsJob[]> {
-  const cfg = config || (await resolveJenkinsConfig());
-  const res = await jenkinsFetch(cfg, `/view/${encodeURIComponent(viewName)}/api/json?tree=jobs[name,url]`);
-  const data = await res.json();
+export async function listJobs(transport: JenkinsTransport, viewName: string): Promise<JenkinsJob[]> {
+  const res = await jenkinsFetch(
+    transport,
+    `/view/${encodeURIComponent(viewName)}/api/json?tree=jobs[name,url]`
+  );
+  const data = JSON.parse(res.body);
   return (data.jobs || []) as JenkinsJob[];
 }
 
-export async function getJobParameters(jobPath: string, config?: JenkinsConfig): Promise<JenkinsParameter[]> {
-  const cfg = config || (await resolveJenkinsConfig());
+export async function getJobParameters(
+  transport: JenkinsTransport,
+  jobPath: string
+): Promise<JenkinsParameter[]> {
   const tree = 'property[parameterDefinitions[name,type,choices,defaultParameterValue[value]]]';
-  const res = await jenkinsFetch(cfg, `${encodeJobPath(jobPath)}/api/json?tree=${encodeURIComponent(tree)}`);
-  const data = await res.json();
+  const res = await jenkinsFetch(
+    transport,
+    `${encodeJobPath(jobPath)}/api/json?tree=${encodeURIComponent(tree)}`
+  );
+  const data = JSON.parse(res.body);
 
   const params: JenkinsParameter[] = [];
   for (const prop of data.property || []) {
@@ -127,50 +131,50 @@ export async function getJobParameters(jobPath: string, config?: JenkinsConfig):
   return params;
 }
 
-// Fetch the values of a dynamic git parameter (Git Parameter plugin). These
-// are not exposed via api/json, but the plugin serves them through the same
-// descriptor "fill" endpoint the Jenkins UI dropdown uses:
-// POST /job/<job>/descriptorByName/<GitParameterDefinition>/fillValueItems?param=X
 export async function getGitParameterValues(
+  transport: JenkinsTransport,
   jobPath: string,
-  paramName: string,
-  config?: JenkinsConfig,
+  paramName: string
 ): Promise<{ choices: string[]; default?: string } | null> {
-  const cfg = config || (await resolveJenkinsConfig());
   const descriptor = 'net.uaznia.lukanus.hudson.plugins.gitparameter.GitParameterDefinition';
   const res = await jenkinsFetch(
-    cfg,
+    transport,
     `${encodeJobPath(jobPath)}/descriptorByName/${descriptor}/fillValueItems?param=${encodeURIComponent(paramName)}`,
-    { method: 'POST' },
+    { method: 'POST' }
   );
-  const data = await res.json();
+  const data = JSON.parse(res.body);
   const values: { value?: string; selected?: boolean }[] = data.values || [];
   const choices = values.map((v) => v.value).filter((v): v is string => !!v);
   if (!choices.length) return null;
   return { choices, default: values.find((v) => v.selected)?.value };
 }
 
-// Trigger a parameterized build; returns the queue item URL from the Location header
-export async function triggerBuild(jobPath: string, params: Record<string, string>, config?: JenkinsConfig): Promise<string> {
-  const cfg = config || (await resolveJenkinsConfig());
-  const body = new URLSearchParams(params);
-  const res = await jenkinsFetch(cfg, `${encodeJobPath(jobPath)}/buildWithParameters`, {
+/** Trigger a parameterized build; returns the queue item URL from the Location header */
+export async function triggerBuild(
+  transport: JenkinsTransport,
+  jobPath: string,
+  params: Record<string, string>
+): Promise<string> {
+  const body = new URLSearchParams(params).toString();
+  const res = await transport.fetch(`${encodeJobPath(jobPath)}/buildWithParameters`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    body: body.toString(),
+    body,
   });
-  const queueUrl = res.headers.get('Location');
+  // Jenkins typically responds 201 with Location
+  if (res.status >= 400) {
+    throw new Error(`Jenkins request failed: ${res.status} (buildWithParameters)`);
+  }
+  const queueUrl = res.headers.location || res.headers.Location;
   if (!queueUrl) {
     throw new Error('Jenkins did not return a queue item location');
   }
   return queueUrl;
 }
 
-// Poll a queue item; returns the executable build once Jenkins schedules it
-export async function getQueueItem(queueUrl: string, config?: JenkinsConfig) {
-  const cfg = config || (await resolveJenkinsConfig());
-  const res = await jenkinsFetch(cfg, `${queueUrl.replace(/\/+$/, '')}/api/json`);
-  const data = await res.json();
+export async function getQueueItem(transport: JenkinsTransport, queueUrl: string) {
+  const res = await jenkinsFetch(transport, `${queueUrl.replace(/\/+$/, '')}/api/json`);
+  const data = JSON.parse(res.body);
   return {
     blocked: !!data.blocked,
     stuck: !!data.stuck,
@@ -182,16 +186,15 @@ export async function getQueueItem(queueUrl: string, config?: JenkinsConfig) {
   };
 }
 
-export async function getBuildStatus(buildUrl: string, config?: JenkinsConfig) {
-  const cfg = config || (await resolveJenkinsConfig());
-  const res = await jenkinsFetch(cfg, `${buildUrl.replace(/\/+$/, '')}/api/json`);
-  const data = await res.json();
+export async function getBuildStatus(transport: JenkinsTransport, buildUrl: string) {
+  const res = await jenkinsFetch(transport, `${buildUrl.replace(/\/+$/, '')}/api/json`);
+  const data = JSON.parse(res.body);
   return {
     number: data.number as number,
     url: data.url as string,
     building: !!data.building,
-    result: data.result as string | null, // SUCCESS, FAILURE, ABORTED, ... (null while building)
-    duration: data.duration as number, // ms, 0 while building
+    result: data.result as string | null,
+    duration: data.duration as number,
     timestamp: data.timestamp as number,
   };
 }

@@ -118,6 +118,28 @@ export interface ProxyResponse {
   body: string;
 }
 
+export interface JenkinsRequest {
+  /** Path relative to Jenkins baseUrl, or absolute URL on the same origin */
+  path: string;
+  method?: string;
+  headers?: Record<string, string>;
+  body?: string;
+  timeoutMs?: number;
+}
+
+export interface JenkinsResponse {
+  status: number;
+  headers: Record<string, string>;
+  body: string;
+}
+
+export interface JenkinsAgentSettings {
+  configured: boolean;
+  baseUrl: string;
+  username: string;
+  hasApiToken: boolean;
+}
+
 export interface ExecutionRequest {
   id: string;
   type: 'sql' | 'rest' | 'script' | 'pods' | 'logs' | 'restart' | 'config';
@@ -647,6 +669,35 @@ class AgentBridge {
     return window.rtAgent!.proxyRequest(request) as Promise<ProxyResponse>;
   }
 
+  /**
+   * Outbound Jenkins request via the local agent. Credentials stay on the agent.
+   * Requires extension >= 1.2.0 and agent >= 1.5.0.
+   */
+  async jenkinsRequest(request: JenkinsRequest): Promise<JenkinsResponse> {
+    if (!this.isAvailable() || typeof window.rtAgent!.jenkinsRequest !== 'function') {
+      throw new Error('Agent extension does not support Jenkins proxy — reload the extension');
+    }
+    return window.rtAgent!.jenkinsRequest(request) as Promise<JenkinsResponse>;
+  }
+
+  async getJenkinsSettings(): Promise<JenkinsAgentSettings> {
+    if (!this.isAvailable() || typeof window.rtAgent!.getJenkinsSettings !== 'function') {
+      throw new Error('Agent extension does not support Jenkins settings — reload the extension');
+    }
+    return window.rtAgent!.getJenkinsSettings() as Promise<JenkinsAgentSettings>;
+  }
+
+  async testJenkinsConnection(): Promise<{ ok: boolean; nodeName?: string; version?: string }> {
+    if (!this.isAvailable() || typeof window.rtAgent!.testJenkinsConnection !== 'function') {
+      throw new Error('Agent extension does not support Jenkins test — reload the extension');
+    }
+    return window.rtAgent!.testJenkinsConnection() as Promise<{
+      ok: boolean;
+      nodeName?: string;
+      version?: string;
+    }>;
+  }
+
   destroy() {
     if (this.checkInterval) {
       clearInterval(this.checkInterval);
@@ -673,6 +724,9 @@ declare global {
       portForward(op: 'stop', params: { id: string }): Promise<unknown>;
       portForward(op: 'list', params?: Record<string, never>): Promise<unknown>;
       proxyRequest?(params: ProxyRequest): Promise<unknown>;
+      jenkinsRequest?(params: JenkinsRequest): Promise<JenkinsResponse>;
+      getJenkinsSettings?(): Promise<JenkinsAgentSettings>;
+      testJenkinsConnection?(): Promise<{ ok: boolean; nodeName?: string; version?: string }>;
       getStatus(): Promise<{ connected: boolean; version?: string; agentUrl?: string }>;
       ping(): Promise<ExecutionResult>;
     };
