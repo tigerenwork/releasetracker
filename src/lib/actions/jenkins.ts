@@ -6,8 +6,6 @@ import { and, desc, eq } from 'drizzle-orm';
 import { revalidatePath } from 'next/cache';
 import type { DeployStatus } from '@/lib/jenkins/client';
 
-export type { DeployStatus };
-
 type JenkinsMapping = {
   view?: string;
   job?: string;
