@@ -25,9 +25,9 @@ Extends ConfigMap last-edit persistence into an **append-only audit trail**. The
 | namespace | TEXT | |
 | config_map_name | TEXT | |
 | deployment_name | TEXT nullable | |
-| patch | TEXT JSON | `{ set: Record<string,string>, delete: string[] }` |
+| patch | TEXT JSON | `{ set, delete, before? }` — `before` holds previous values for changed/deleted keys |
 | rollout_restart | INTEGER bool | whether restart succeeded as part of this apply |
-| source | TEXT | `pods-ui` \| `release-step` \| `auto-runner` |
+| source | TEXT | `pods-ui` \| `release-step` \| `auto-runner` \| `init` |
 | release_id | INTEGER nullable | set for release-step / auto-runner |
 | step_id | INTEGER nullable | set for release-step / auto-runner |
 | edited_at | INTEGER timestamp | |
@@ -51,7 +51,8 @@ DDL also lives in `CREATE_TABLES_SQL` + `migrateSqlite` / `migrateTurso` in `src
 
 `src/lib/actions/config-map-edits.ts`:
 
-- `recordConfigMapEdit(input)` — **insert** history, then upsert last-edit cache. Accepts `source`, optional `releaseId` / `stepId`.
+- `recordConfigMapEdit(input)` — **insert** history, then upsert last-edit cache. Accepts `source`, optional `before` / `releaseId` / `stepId`. When history is empty and `before` is provided, inserts an `init` baseline row first.
+- `beforeValuesFromData(data, patch)` — helper to extract previous values for touched keys.
 - `getLastConfigMapEdit(...)` — unchanged summary for the editor header.
 - `getConfigMapEditHistory(..., limit?)` — newest-first list (default 50, max 200).
 

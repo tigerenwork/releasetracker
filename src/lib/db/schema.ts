@@ -257,6 +257,7 @@ export const configMapEdits = sqliteTable('config_map_edits', {
   patch: text('patch', { mode: 'json' }).$type<{
     set: Record<string, string>;
     delete: string[];
+    before?: Record<string, string>;
   }>().notNull(),
   rolloutRestart: integer('rollout_restart', { mode: 'boolean' }).notNull().default(false),
   editedAt: integer('edited_at', { mode: 'timestamp' }).notNull(),
@@ -265,8 +266,16 @@ export const configMapEdits = sqliteTable('config_map_edits', {
     .on(table.kubeContext, table.namespace, table.configMapName),
 }));
 
-/** Where a ConfigMap edit originated */
-export type ConfigMapEditSource = 'pods-ui' | 'release-step' | 'auto-runner';
+/** Where a ConfigMap edit originated (`init` = pre-edit baseline when history was empty) */
+export type ConfigMapEditSource = 'pods-ui' | 'release-step' | 'auto-runner' | 'init';
+
+/** Patch recorded in history / last-edit cache */
+export type ConfigMapEditPatch = {
+  set: Record<string, string>;
+  delete: string[];
+  /** Previous values for keys in set/delete (omitted for brand-new keys) */
+  before?: Record<string, string>;
+};
 
 // Append-only audit trail of ConfigMap env/key changes
 export const configMapEditHistory = sqliteTable('config_map_edit_history', {
@@ -275,10 +284,7 @@ export const configMapEditHistory = sqliteTable('config_map_edit_history', {
   namespace: text('namespace').notNull(),
   configMapName: text('config_map_name').notNull(),
   deploymentName: text('deployment_name'),
-  patch: text('patch', { mode: 'json' }).$type<{
-    set: Record<string, string>;
-    delete: string[];
-  }>().notNull(),
+  patch: text('patch', { mode: 'json' }).$type<ConfigMapEditPatch>().notNull(),
   rolloutRestart: integer('rollout_restart', { mode: 'boolean' }).notNull().default(false),
   source: text('source').$type<ConfigMapEditSource>().notNull(),
   releaseId: integer('release_id'),

@@ -19,6 +19,7 @@ const SOURCE_LABEL: Record<ConfigMapHistoryEntry['source'], string> = {
   'pods-ui': 'Pods UI',
   'release-step': 'Release step',
   'auto-runner': 'Auto-run',
+  init: 'Initial',
 };
 
 function truncateValue(value: string, max = 120): string {
@@ -27,12 +28,26 @@ function truncateValue(value: string, max = 120): string {
   return `${singleLine.slice(0, max)}…`;
 }
 
+function ValueBlock({ value, muted }: { value: string; muted?: boolean }) {
+  return (
+    <pre
+      className={`whitespace-pre-wrap break-all rounded px-2 py-1 font-mono text-[11px] ${
+        muted ? 'bg-slate-100 text-slate-500 line-through' : 'bg-slate-50 text-slate-700'
+      }`}
+    >
+      {truncateValue(value, 400)}
+    </pre>
+  );
+}
+
 function HistoryEntry({ entry }: { entry: ConfigMapHistoryEntry }) {
   const [open, setOpen] = useState(false);
+  const isInit = entry.source === 'init';
   const setEntries = Object.entries(entry.patch.set ?? {}).sort(([a], [b]) =>
     a.localeCompare(b)
   );
   const deleted = [...(entry.patch.delete ?? [])].sort();
+  const before = entry.patch.before ?? {};
 
   return (
     <Collapsible open={open} onOpenChange={setOpen} className="rounded-md border">
@@ -61,10 +76,13 @@ function HistoryEntry({ entry }: { entry: ConfigMapHistoryEntry }) {
               )}
             </div>
             <p className="text-[11px] text-slate-500">
-              {entry.setKeys} key{entry.setKeys === 1 ? '' : 's'} set
-              {entry.deletedKeys > 0
-                ? `, ${entry.deletedKeys} deleted`
-                : ''}
+              {isInit
+                ? `Baseline · ${entry.setKeys} key${entry.setKeys === 1 ? '' : 's'}`
+                : `${entry.setKeys} key${entry.setKeys === 1 ? '' : 's'} set${
+                    entry.deletedKeys > 0
+                      ? `, ${entry.deletedKeys} deleted`
+                      : ''
+                  }`}
               {entry.deploymentName ? ` · ${entry.deploymentName}` : ''}
             </p>
           </div>
@@ -74,29 +92,52 @@ function HistoryEntry({ entry }: { entry: ConfigMapHistoryEntry }) {
         {setEntries.length === 0 && deleted.length === 0 && (
           <p className="text-xs text-slate-500">No key changes recorded.</p>
         )}
-        {setEntries.map(([key, value]) => (
-          <div key={`set-${key}`} className="space-y-0.5">
-            <div className="flex items-center gap-1.5">
-              <Badge className="bg-emerald-100 text-emerald-800 hover:bg-emerald-100 text-[10px]">
-                set
-              </Badge>
-              <span className="font-mono text-[11px] break-all">{key}</span>
+        {isInit &&
+          setEntries.map(([key, value]) => (
+            <div key={`init-${key}`} className="space-y-0.5">
+              <div className="flex items-center gap-1.5">
+                <Badge className="bg-slate-200 text-slate-700 hover:bg-slate-200 text-[10px]">
+                  was
+                </Badge>
+                <span className="font-mono text-[11px] break-all">{key}</span>
+              </div>
+              <ValueBlock value={value} />
             </div>
-            <pre className="whitespace-pre-wrap break-all rounded bg-slate-50 px-2 py-1 font-mono text-[11px] text-slate-700">
-              {truncateValue(value, 400)}
-            </pre>
-          </div>
-        ))}
-        {deleted.map((key) => (
-          <div key={`del-${key}`} className="flex items-center gap-1.5">
-            <Badge className="bg-red-100 text-red-800 hover:bg-red-100 text-[10px]">
-              deleted
-            </Badge>
-            <span className="font-mono text-[11px] break-all line-through text-slate-500">
-              {key}
-            </span>
-          </div>
-        ))}
+          ))}
+        {!isInit &&
+          setEntries.map(([key, value]) => {
+            const prev = before[key];
+            const isNewKey = prev === undefined;
+            return (
+              <div key={`set-${key}`} className="space-y-0.5">
+                <div className="flex items-center gap-1.5">
+                  <Badge className="bg-emerald-100 text-emerald-800 hover:bg-emerald-100 text-[10px]">
+                    {isNewKey ? 'added' : 'set'}
+                  </Badge>
+                  <span className="font-mono text-[11px] break-all">{key}</span>
+                </div>
+                {prev !== undefined && <ValueBlock value={prev} muted />}
+                <ValueBlock value={value} />
+              </div>
+            );
+          })}
+        {!isInit &&
+          deleted.map((key) => {
+            const prev = before[key];
+            return (
+              <div key={`del-${key}`} className="space-y-0.5">
+                <div className="flex items-center gap-1.5">
+                  <Badge className="bg-red-100 text-red-800 hover:bg-red-100 text-[10px]">
+                    deleted
+                  </Badge>
+                  <span className="font-mono text-[11px] break-all line-through text-slate-500">
+                    {key}
+                  </span>
+                </div>
+                {prev !== undefined && <ValueBlock value={prev} muted />}
+              </div>
+            );
+          })}
         <p className="text-[10px] text-slate-400">
           {new Date(entry.editedAt).toLocaleString()}
           {entry.releaseId != null ? ` · release #${entry.releaseId}` : ''}

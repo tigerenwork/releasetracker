@@ -32,7 +32,8 @@ Every successful ConfigMap apply appends an audit row (patch + metadata). The Co
 |----|-----------|
 | US-CMH-001 | As an engineer, after I edit a ConfigMap I want that change kept in history so I can revisit it later |
 | US-CMH-002 | As an engineer, I want to open Edit history on a ConfigMap and see past edits newest-first |
-| US-CMH-003 | As an engineer, I want each history entry to show which keys were set or deleted and the new values |
+| US-CMH-003 | As an engineer, I want each history entry to show which keys were set or deleted, with previous→new values when known |
+| US-CMH-003a | As an engineer, when I make the first tracked edit, I want the pre-edit values saved as an Initial baseline |
 | US-CMH-004 | As an engineer, I want to know whether the edit came from the Pods UI, a release step, or auto-run |
 | US-CMH-005 | As an engineer, I still want the “Last edited …” summary so I do not need to open history for a quick check |
 

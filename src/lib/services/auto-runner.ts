@@ -21,7 +21,10 @@ import { agentBridge, type ExecutionContext, type ExecutionResult, type PodInfo 
 import { buildSqlScript, type SqlClient } from '@/lib/sql-script';
 import { parseConfigMapContent } from '@/lib/configmap-content';
 import { appFromPodName } from '@/lib/grafana';
-import { recordConfigMapEdit } from '@/lib/actions/config-map-edits';
+import {
+  recordConfigMapEdit,
+  beforeValuesFromData,
+} from '@/lib/actions/config-map-edits';
 import {
   getCustomerRunPlan,
   markStepRunning,
@@ -463,6 +466,18 @@ async function runConfigMap(
   }
 
   const patch = { set: parsed.set, delete: parsed.delete };
+
+  // Capture previous values before apply so history can show before→after
+  let before: Record<string, string> | undefined;
+  try {
+    const current = await agentBridge.configGet(ctx, configMapName);
+    if (current.success && current.config?.data) {
+      before = beforeValuesFromData(current.config.data, patch);
+    }
+  } catch {
+    // history still records the patch without before
+  }
+
   const applied = await agentBridge.configApply(ctx, configMapName, patch);
   if (!applied.success) {
     return { ok: false, error: applied.error?.message ?? 'ConfigMap apply failed' };
@@ -485,6 +500,7 @@ async function runConfigMap(
       configMapName,
       deploymentName: deployment,
       patch,
+      before,
       rolloutRestart: restarted,
       source: 'auto-runner',
       releaseId: step.releaseId,

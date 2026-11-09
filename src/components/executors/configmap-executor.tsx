@@ -22,7 +22,10 @@ import {
   type PodInfo,
 } from '@/lib/services/agent-bridge';
 import { appFromPodName } from '@/lib/grafana';
-import { recordConfigMapEdit } from '@/lib/actions/config-map-edits';
+import {
+  recordConfigMapEdit,
+  beforeValuesFromData,
+} from '@/lib/actions/config-map-edits';
 import { parseConfigMapContent } from '@/lib/configmap-content';
 
 interface ConfigMapExecutorProps {
@@ -154,6 +157,17 @@ export function ConfigMapExecutor({ stepId, customerId, releaseId, content, name
 
     const patch = { set: vars, delete: delKeys };
     try {
+      // Capture previous values before apply so history can show before→after
+      let before: Record<string, string> | undefined;
+      try {
+        const current = await agentBridge.configGet(bridgeContext(), configMapName);
+        if (current.success && current.config?.data) {
+          before = beforeValuesFromData(current.config.data, patch);
+        }
+      } catch {
+        // history still records the patch without before
+      }
+
       const res = await agentBridge.configApply(bridgeContext(), configMapName, patch);
       if (!res.success) {
         setApplyError(res.error?.message || 'Failed to apply ConfigMap changes');
@@ -169,6 +183,7 @@ export function ConfigMapExecutor({ stepId, customerId, releaseId, content, name
           configMapName,
           deploymentName,
           patch,
+          before,
           rolloutRestart: false,
           source: 'release-step',
           releaseId,

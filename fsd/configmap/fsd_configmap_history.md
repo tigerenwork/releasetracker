@@ -15,7 +15,8 @@
 | # | 行为 |
 |---|------|
 | F1 | 在 Pods Config 编辑器中，选中 ConfigMap 后可展开「Edit history」，按时间倒序查看历史 |
-| F2 | 每条历史可展开，看到被 set 的 key/新值，以及被 deleted 的 key；并显示来源（Pods UI / Release step / Auto-run） |
+| F2 | 每条历史可展开，看到被 set/deleted 的 key；有旧值时展示旧值→新值；首次编辑前若无历史会多一条 Initial 基线 |
+| F2a | 来源徽章：Pods UI / Release step / Auto-run / Initial |
 | F3 | 成功保存后历史会刷新；「Last edited …」仍显示最近一次编辑摘要 |
 | F4 | 从版本步骤或自动运行应用 ConfigMap 变更时，同样写入历史（含 release/step 关联） |
 | F5 | 历史加载失败不影响继续编辑 ConfigMap |
@@ -27,4 +28,5 @@
 
 ## 变更记录
 
+- 2026-11-09 feat(configmap): 历史记录旧值并在无历史时写入 Initial 基线 — 详情见 [fsd_configmap_history_changelog_20261109.md](./fsd_configmap_history_changelog_20261109.md)
 - 2026-11-09 feat(configmap): 新增 ConfigMap 编辑审计历史，可追溯增删改 — 初版

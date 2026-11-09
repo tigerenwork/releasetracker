@@ -38,6 +38,7 @@ import { formatRelativeTime } from '@/components/pods/pod-utils';
 import {
   recordConfigMapEdit,
   getLastConfigMapEdit,
+  beforeValuesFromData,
 } from '@/lib/actions/config-map-edits';
 import { ConfigMapHistoryPanel } from '@/components/pods/config-map-history-panel';
 
@@ -269,6 +270,7 @@ export function ConfigEditorDialog({ kubeContext, namespace, podName, onSaved }:
           configMapName: selected.name,
           deploymentName,
           patch: diff,
+          before: pristine ? beforeValuesFromData(pristine, diff) : undefined,
           rolloutRestart: restarted,
           source: 'pods-ui',
         });
