@@ -39,6 +39,7 @@ import {
   recordConfigMapEdit,
   getLastConfigMapEdit,
 } from '@/lib/actions/config-map-edits';
+import { ConfigMapHistoryPanel } from '@/components/pods/config-map-history-panel';
 
 interface ConfigEditorDialogProps {
   kubeContext?: string;
@@ -91,6 +92,7 @@ export function ConfigEditorDialog({ kubeContext, namespace, podName, onSaved }:
   const [truncated, setTruncated] = useState(false);
   const [lastEdit, setLastEdit] = useState<LastEdit | null>(null);
   const [newKey, setNewKey] = useState('');
+  const [historyRefreshKey, setHistoryRefreshKey] = useState(0);
 
   // save flow
   const [confirmOpen, setConfirmOpen] = useState(false);
@@ -259,7 +261,7 @@ export function ConfigEditorDialog({ kubeContext, namespace, podName, onSaved }:
         }
       }
 
-      // Persist the last edit — non-blocking: the edit is already applied
+      // Persist last-edit + audit history — non-blocking: the edit is already applied
       try {
         await recordConfigMapEdit({
           kubeContext: kubeContext ?? '',
@@ -268,6 +270,7 @@ export function ConfigEditorDialog({ kubeContext, namespace, podName, onSaved }:
           deploymentName,
           patch: diff,
           rolloutRestart: restarted,
+          source: 'pods-ui',
         });
       } catch (persistErr) {
         console.error('Failed to record ConfigMap edit:', persistErr);
@@ -281,6 +284,7 @@ export function ConfigEditorDialog({ kubeContext, namespace, podName, onSaved }:
         setKeys: changedKeys.length,
         deletedKeys: deletedKeys.length,
       });
+      setHistoryRefreshKey((k) => k + 1);
       setSaveMessage(
         `Saved ${changedKeys.length} key${changedKeys.length === 1 ? '' : 's'}` +
           (deletedKeys.length > 0
@@ -412,6 +416,13 @@ export function ConfigEditorDialog({ kubeContext, namespace, podName, onSaved }:
                 {lastEdit.rolloutRestart ? ', rollout restarted' : ''}
               </p>
             )}
+
+            <ConfigMapHistoryPanel
+              kubeContext={kubeContext ?? ''}
+              namespace={namespace}
+              configMapName={selected.name}
+              refreshKey={historyRefreshKey}
+            />
 
             {truncated && (
               <div className="p-3 bg-amber-50 text-amber-700 rounded-md text-sm">

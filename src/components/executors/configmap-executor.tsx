@@ -161,7 +161,7 @@ export function ConfigMapExecutor({ stepId, customerId, releaseId, content, name
       }
       setApplied(true);
 
-      // Persist the last edit — non-blocking: the edit is already applied
+      // Persist last-edit + audit history — non-blocking: the edit is already applied
       try {
         await recordConfigMapEdit({
           kubeContext: kubeContext ?? '',
@@ -170,6 +170,9 @@ export function ConfigMapExecutor({ stepId, customerId, releaseId, content, name
           deploymentName,
           patch,
           rolloutRestart: false,
+          source: 'release-step',
+          releaseId,
+          stepId,
         });
       } catch (persistErr) {
         console.error('Failed to record ConfigMap edit:', persistErr);

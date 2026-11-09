@@ -21,6 +21,7 @@ import { agentBridge, type ExecutionContext, type ExecutionResult, type PodInfo 
 import { buildSqlScript, type SqlClient } from '@/lib/sql-script';
 import { parseConfigMapContent } from '@/lib/configmap-content';
 import { appFromPodName } from '@/lib/grafana';
+import { recordConfigMapEdit } from '@/lib/actions/config-map-edits';
 import {
   getCustomerRunPlan,
   markStepRunning,
@@ -461,17 +462,38 @@ async function runConfigMap(
     configMapName = refs[0].name;
   }
 
-  const applied = await agentBridge.configApply(ctx, configMapName, { set: parsed.set, delete: parsed.delete });
+  const patch = { set: parsed.set, delete: parsed.delete };
+  const applied = await agentBridge.configApply(ctx, configMapName, patch);
   if (!applied.success) {
     return { ok: false, error: applied.error?.message ?? 'ConfigMap apply failed' };
   }
 
+  let restarted = false;
   if (step.template?.executionConfig?.configmap?.rolloutRestart) {
-    const restarted = await agentBridge.rolloutRestart(ctx, deployment);
-    if (!restarted.success) {
-      return { ok: false, error: restarted.error?.message ?? 'Rollout restart failed' };
+    const restartRes = await agentBridge.rolloutRestart(ctx, deployment);
+    if (!restartRes.success) {
+      return { ok: false, error: restartRes.error?.message ?? 'Rollout restart failed' };
     }
+    restarted = true;
   }
+
+  // Persist last-edit + audit history — non-blocking: the edit is already applied
+  try {
+    await recordConfigMapEdit({
+      kubeContext: plan.customer.cluster?.name ?? '',
+      namespace: plan.customer.namespace,
+      configMapName,
+      deploymentName: deployment,
+      patch,
+      rolloutRestart: restarted,
+      source: 'auto-runner',
+      releaseId: step.releaseId,
+      stepId: step.id,
+    });
+  } catch (persistErr) {
+    console.error('Failed to record ConfigMap edit:', persistErr);
+  }
+
   return { ok: true };
 }
 

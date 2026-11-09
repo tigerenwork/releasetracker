@@ -247,7 +247,7 @@ export const grafanaSettings = sqliteTable('grafana_settings', {
 });
 
 // ==================== ConfigMap Edits ====================
-// Most recent ConfigMap edit per (cluster, namespace, configmap) — last-edit persistence
+// Most recent ConfigMap edit per (cluster, namespace, configmap) — last-edit cache
 export const configMapEdits = sqliteTable('config_map_edits', {
   id: integer('id').primaryKey({ autoIncrement: true }),
   kubeContext: text('kube_context').notNull(),     // cluster name
@@ -263,6 +263,30 @@ export const configMapEdits = sqliteTable('config_map_edits', {
 }, (table) => ({
   uniqueConfigMapEdit: uniqueIndex('unique_config_map_edit')
     .on(table.kubeContext, table.namespace, table.configMapName),
+}));
+
+/** Where a ConfigMap edit originated */
+export type ConfigMapEditSource = 'pods-ui' | 'release-step' | 'auto-runner';
+
+// Append-only audit trail of ConfigMap env/key changes
+export const configMapEditHistory = sqliteTable('config_map_edit_history', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  kubeContext: text('kube_context').notNull(),
+  namespace: text('namespace').notNull(),
+  configMapName: text('config_map_name').notNull(),
+  deploymentName: text('deployment_name'),
+  patch: text('patch', { mode: 'json' }).$type<{
+    set: Record<string, string>;
+    delete: string[];
+  }>().notNull(),
+  rolloutRestart: integer('rollout_restart', { mode: 'boolean' }).notNull().default(false),
+  source: text('source').$type<ConfigMapEditSource>().notNull(),
+  releaseId: integer('release_id'),
+  stepId: integer('step_id'),
+  editedAt: integer('edited_at', { mode: 'timestamp' }).notNull(),
+}, (table) => ({
+  historyLookupIdx: index('idx_config_map_edit_history_lookup')
+    .on(table.kubeContext, table.namespace, table.configMapName, table.editedAt),
 }));
 
 // ==================== Release Customers (enrollment) ====================
@@ -341,6 +365,9 @@ export type NewCollectionCustomer = typeof collectionCustomers.$inferInsert;
 
 export type ConfigMapEdit = typeof configMapEdits.$inferSelect;
 export type NewConfigMapEdit = typeof configMapEdits.$inferInsert;
+
+export type ConfigMapEditHistory = typeof configMapEditHistory.$inferSelect;
+export type NewConfigMapEditHistory = typeof configMapEditHistory.$inferInsert;
 
 export type JenkinsSettings = typeof jenkinsSettings.$inferSelect;
 export type NewJenkinsSettings = typeof jenkinsSettings.$inferInsert;

@@ -24,7 +24,7 @@ From the Pods UI, let a user:
 2. View a ConfigMap's data.
 3. Edit keys (add / change / delete) and save, applied to the cluster via the local agent.
 4. Optionally trigger a rollout restart of **that Deployment only** so pods pick up the change.
-5. See when/what the last edit was (last-edit persistence; full history is a future phase).
+5. See when/what the last edit was, plus an append-only edit history (see `docs/TSD-CONFIGMAP-HISTORY.md`).
 
 ### 1.3 Non-Goals (v1)
 
@@ -32,8 +32,8 @@ From the Pods UI, let a user:
 - `binaryData` keys (bridge is JSON-only; needs base64 path).
 - Raw whole-manifest YAML editing of arbitrary resources (Deployments, Ingresses, …).
 - StatefulSet/DaemonSet support (v1 resolves Deployments via pod-name derivation, §2.3).
-- Full audit history of config edits — v1 persists only the **last edit** per ConfigMap
-  (§7.4); an append-only audit trail is a future phase.
+- Full audit history of config edits was deferred from v1 (§7.4); delivered in
+  `docs/TSD-CONFIGMAP-HISTORY.md`.
 
 ### 1.4 Why this is feasible today
 
@@ -392,9 +392,8 @@ checkbox, pre-ticked when the ConfigMap is consumed via `envFrom`/`volume` (the 
 running pods don't see the change until recreated).
 
 ### Q5: Audit trail?
-v1 persists only the **last edit** per ConfigMap (upsert into `config_map_edits`, §7.4). A
-full append-only history is a future phase; it can reuse the same write path by switching the
-upsert to an insert.
+v1 persisted only the **last edit** per ConfigMap (upsert into `config_map_edits`, §7.4).
+An append-only history table is now implemented — see `docs/TSD-CONFIGMAP-HISTORY.md`.
 
 ### Q6: Secrets?
 Explicitly out of scope. The executor hardcodes `configmap`; adding secrets later requires its

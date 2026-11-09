@@ -283,6 +283,40 @@ const CREATE_TABLES_SQL = `
     edited_at INTEGER NOT NULL,
     UNIQUE(kube_context, namespace, config_map_name)
   );
+
+  CREATE TABLE IF NOT EXISTS config_map_edit_history (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    kube_context TEXT NOT NULL,
+    namespace TEXT NOT NULL,
+    config_map_name TEXT NOT NULL,
+    deployment_name TEXT,
+    patch TEXT NOT NULL, -- JSON: { set: {...}, delete: [...] }
+    rollout_restart INTEGER NOT NULL DEFAULT 0,
+    source TEXT NOT NULL, -- 'pods-ui' | 'release-step' | 'auto-runner'
+    release_id INTEGER,
+    step_id INTEGER,
+    edited_at INTEGER NOT NULL
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_config_map_edit_history_lookup
+    ON config_map_edit_history(kube_context, namespace, config_map_name, edited_at);
+`;
+
+const BACKFILL_CONFIG_MAP_HISTORY_SQL = `
+  INSERT INTO config_map_edit_history (
+    kube_context, namespace, config_map_name, deployment_name,
+    patch, rollout_restart, source, edited_at
+  )
+  SELECT
+    e.kube_context, e.namespace, e.config_map_name, e.deployment_name,
+    e.patch, e.rollout_restart, 'pods-ui', e.edited_at
+  FROM config_map_edits e
+  WHERE NOT EXISTS (
+    SELECT 1 FROM config_map_edit_history h
+    WHERE h.kube_context = e.kube_context
+      AND h.namespace = e.namespace
+      AND h.config_map_name = e.config_map_name
+  );
 `;
 
 // Backfill SQL: populate release_customers from existing customer_steps for already-active releases
@@ -442,7 +476,14 @@ function migrateSqlite(client: Database.Database) {
     client.exec('ALTER TABLE customers ADD COLUMN website_url TEXT');
   }
 
-  // 4. Rebuild tables with stale CHECK constraints or a bad column DEFAULT
+  // 5. Seed history from last-edit cache (idempotent; only when no history yet)
+  try {
+    client.exec(BACKFILL_CONFIG_MAP_HISTORY_SQL);
+  } catch {
+    // Table may not exist yet on very old DBs — CREATE_TABLES_SQL runs first
+  }
+
+  // 6. Rebuild tables with stale CHECK constraints or a bad column DEFAULT
   const ddlOf = (table: string) =>
     (client.prepare('SELECT sql FROM sqlite_master WHERE name = ?').get(table) as { sql?: string } | undefined)?.sql || '';
 
@@ -495,7 +536,14 @@ async function migrateTurso(client: ReturnType<typeof createClient>) {
     await client.execute('ALTER TABLE customers ADD COLUMN website_url TEXT');
   }
 
-  // 4. Rebuild tables with stale CHECK constraints or a bad column DEFAULT
+  // 5. Seed history from last-edit cache (idempotent)
+  try {
+    await client.execute(BACKFILL_CONFIG_MAP_HISTORY_SQL);
+  } catch {
+    // ignore — CREATE_TABLES_SQL creates the table first
+  }
+
+  // 6. Rebuild tables with stale CHECK constraints or a bad column DEFAULT
   const ddlOf = async (table: string) => {
     const rs = await client.execute({ sql: 'SELECT sql FROM sqlite_master WHERE name = ?', args: [table] });
     return (rs.rows[0]?.sql as string | undefined) || '';
